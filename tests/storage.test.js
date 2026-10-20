@@ -5,7 +5,7 @@ const makeStorage = () => {
   const data = new Map();
   return { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
 };
-const workout = { id: 'one', type: 'regular', date: '2020-01-01', distance: null, duration: null, style: '', comment: '', createdAt: '2020-01-01T08:00:00Z' };
+const workout = { id: 'one', date: '2020-01-01', title: '', exercises: [], distance: null, duration: null, style: '', comment: '', createdAt: '2020-01-01T08:00:00Z' };
 test('fresh storage starts empty and survives a new read', () => {
   const storage = makeStorage();
   assert.deepEqual(readWorkouts(storage), []);
@@ -32,4 +32,18 @@ test('duplicate ids are rejected before storage is changed', () => {
   const storage = makeStorage();
   assert.throws(() => writeWorkouts(storage, [workout, workout]), /уникальны/);
   assert.equal(storage.getItem(STORAGE_KEY), null);
+});
+test('existing storage migrates on read without clearing or overwriting the old data', () => {
+  const storage = makeStorage();
+  const old = JSON.stringify({ version: 1, workouts: [{
+    id: 'old', date: '2020-01-01', type: 'timed', distance: 100, duration: 108,
+    style: 'freestyle', comment: 'Старая запись', createdAt: '2020-01-01T08:00:00Z',
+  }] });
+  storage.setItem(STORAGE_KEY, old);
+  const migrated = readWorkouts(storage);
+  assert.equal(migrated[0].exercises[0].result, 108);
+  assert.equal(storage.getItem(STORAGE_KEY), old);
+  writeWorkouts(storage, migrated);
+  assert.equal(JSON.parse(storage.getItem(STORAGE_KEY)).version, 2);
+  assert.deepEqual(readWorkouts(storage), migrated);
 });
