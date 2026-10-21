@@ -2,9 +2,11 @@ import {
   STYLES, dateKey, monthKey, validateWorkout, summary, sortedWorkouts, formatTime,
   pace, personalBests, previousResult, monthlySeries, weeklySeries, paceSeries,
   recordKey, createDemo, parseBackup, backupJSON, totalDistance, totalDuration,
-  hasCompleteDurations, timedResults, copyWorkout, templateWorkouts,
+  exercisesOf, blockDistance, formatCentiseconds, timedResults, copyWorkout, templateWorkouts,
 } from './domain.js';
 import { readWorkouts, writeWorkouts, STORAGE_KEY } from './storage.js';
+import { editorHTML, mountEditor, newBlock } from './editor.js';
+import { resultDraft, resultOverview, resultsEditorHTML, mountResultsEditor, withExerciseResults, discardHTML, protectEditor } from './results-editor.js';
 
 const icons = {
   wave: '<path d="M2 9q5-5 10 0t10 0M2 16q5-5 10 0t10 0"/>',
@@ -56,6 +58,7 @@ let selectedPace = '';
 let toastTimer;
 let lastFocus;
 let pendingImport = null;
+let activeEditor = null;
 const nav = [['dashboard', 'home', 'Обзор'], ['diary', 'book', 'Дневник'], ['stats', 'chart', 'Статистика']];
 
 function toast(message) {
@@ -140,36 +143,38 @@ function calendar() {
   const days = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
   const counts = new Map();
   workouts.filter(w => w.date.startsWith(calendarMonth)).forEach(w => counts.set(w.date, (counts.get(w.date) || 0) + 1));
+  const completedDates = new Set(workouts.filter(w => w.status === 'COMPLETED' && w.date.startsWith(calendarMonth)).map(w => w.date));
+  const plannedDates = new Set(workouts.filter(w => w.status === 'PLANNED' && w.date.startsWith(calendarMonth)).map(w => w.date));
   return `<div class="calendar-toolbar"><h3>${monthLabel(calendarMonth)}</h3><div><button class="calendar-today" data-action="calendar-today">Сегодня</button><button class="icon-button" data-action="prev-month" aria-label="Предыдущий месяц">${icon('left')}</button><button class="icon-button" data-action="next-month" aria-label="Следующий месяц">${icon('right')}</button></div></div>
     <div class="calendar-grid"><div class="week-label">Пн</div><div class="week-label">Вт</div><div class="week-label">Ср</div><div class="week-label">Чт</div><div class="week-label">Пт</div><div class="week-label weekend">Сб</div><div class="week-label weekend">Вс</div>
     ${Array.from({ length: leading }, () => '<span class="calendar-spacer"></span>').join('')}
     ${Array.from({ length: days }, (_, i) => {
       const key = `${calendarMonth}-${String(i + 1).padStart(2, '0')}`;
       const count = counts.get(key) || 0;
-      return `<button class="day ${count ? 'has-workout' : ''} ${key === today ? 'today' : ''} ${key > today ? 'future' : ''}" data-action="day" data-date="${key}" ${key === today ? 'aria-current="date"' : ''} aria-label="${dateLabel(key, { day: 'numeric', month: 'long', year: 'numeric' })}, ${count} ${plural(count, 'тренировка', 'тренировки', 'тренировок')}"><span>${i + 1}</span>${count ? `<span class="day-dots">${Array.from({ length: Math.min(count, 3) }, () => '<i></i>').join('')}</span>` : ''}</button>`;
-    }).join('')}</div><div class="calendar-footer"><span>${counts.size} ${plural(counts.size, 'день', 'дня', 'дней')} в воде в этом месяце</span><span>Ваше время для себя</span></div>`;
+      return `<button class="day ${completedDates.has(key) ? 'has-workout' : ''} ${plannedDates.has(key) ? 'has-planned' : ''} ${key === today ? 'today' : ''} ${key > today ? 'future' : ''}" data-action="day" data-date="${key}" ${key === today ? 'aria-current="date"' : ''} aria-label="${dateLabel(key, { day: 'numeric', month: 'long', year: 'numeric' })}, ${count} ${plural(count, 'тренировка', 'тренировки', 'тренировок')}${plannedDates.has(key) ? ', есть план' : ''}"><span>${i + 1}</span>${count ? `<span class="day-dots">${Array.from({ length: Math.min(count, 3) }, () => '<i></i>').join('')}</span>` : ''}</button>`;
+    }).join('')}</div><div class="calendar-footer"><span>${completedDates.size} ${plural(completedDates.size, 'день', 'дня', 'дней')} в воде в этом месяце</span><span>Пунктир — запланировано</span></div>`;
 }
 function workoutRow(w, compact = false) {
-  const isTimed = w.exercises.some(exercise => exercise.timed);
+  const isTimed = exercisesOf(w).some(exercise => exercise.results.length);
   const best = isTimed && personalBests(workouts).some(item => item.id === w.id);
   const duration = totalDuration(w);
   const row = `<button class="workout-row ${compact ? 'compact' : ''}" data-action="detail" data-id="${esc(w.id)}">
     <span class="workout-symbol ${isTimed ? 'timed' : ''}">${icon(isTimed ? 'clock' : 'wave')}</span>
-    <span class="workout-description"><span class="workout-title">${esc(w.title || (w.style ? STYLES[w.style] : 'Тренировка'))}${best ? `<span class="record-marker" aria-label="Личный рекорд">${icon('trophy')}</span>` : ''}</span><span class="workout-subtitle">${dateLabel(w.date)} · ${w.exercises.length} ${plural(w.exercises.length, 'задание', 'задания', 'заданий')}</span>${!compact && w.comment ? `<span class="workout-comment">${esc(w.comment)}</span>` : ''}</span>
-    <span class="workout-numbers"><strong>${distanceLabel(totalDistance(w))}</strong><span>${duration !== null ? `${formatTime(duration)} мин:сек` : 'В своём ритме'}</span></span>${icon('right', 'row-arrow')}</button>`;
-  return compact ? row : `<div class="diary-entry">${row}${w.exercises.length ? `<details class="exercise-disclosure"><summary>Задания (${w.exercises.length})</summary>${exerciseList(w)}</details>` : ''}</div>`;
+    <span class="workout-description"><span class="workout-title">${esc(w.title || (w.style ? STYLES[w.style] : 'Тренировка'))}${best ? `<span class="record-marker" aria-label="Личный рекорд">${icon('trophy')}</span>` : ''}</span><span class="workout-subtitle">${w.status === 'PLANNED' ? '◌ Запланирована' : '✓ Выполнена'} · ${dateLabel(w.date)} · ${exercisesOf(w).length} ${plural(exercisesOf(w).length, 'задание', 'задания', 'заданий')}</span>${!compact && w.comment ? `<span class="workout-comment">${esc(w.comment)}</span>` : ''}</span>
+    <span class="workout-numbers"><strong>${distanceLabel(totalDistance(w))}</strong><span>${duration !== null ? `${formatCentiseconds(w.durationCs)} мин:сек` : 'В своём ритме'}</span></span>${icon('right', 'row-arrow')}</button>`;
+  return compact ? row : `<div class="diary-entry">${row}${exercisesOf(w).length ? `<details class="exercise-disclosure"><summary>Задания (${exercisesOf(w).length})</summary>${exerciseList(w)}</details>` : ''}</div>`;
 }
 function diary() {
   const months = [...new Set(workouts.map(w => w.date.slice(0, 7)))].sort().reverse();
   const items = sortedWorkouts(workouts.filter(w =>
-    (filterType === 'all' || w.exercises.some(e => e.timed) === (filterType === 'timed')) &&
+    (filterType === 'all' || w.status === filterType) &&
     (!filterMonth || w.date.startsWith(filterMonth)) &&
-    (!filterSearch || `${w.title} ${w.comment} ${STYLES[w.style] || ''} ${totalDistance(w) || ''} ${w.exercises.map(e => `${e.description} ${STYLES[e.style]} ${e.distance}`).join(' ')}`.toLocaleLowerCase('ru').includes(filterSearch.toLocaleLowerCase('ru')))));
+    (!filterSearch || `${w.title} ${w.comment} ${STYLES[w.style] || ''} ${totalDistance(w) || ''} ${exercisesOf(w).map(e => `${e.description} ${e.technique} ${STYLES[e.style]} ${e.distance}`).join(' ')}`.toLocaleLowerCase('ru').includes(filterSearch.toLocaleLowerCase('ru')))));
   const groups = new Map();
   items.forEach(w => { const key = w.date.slice(0, 7); if (!groups.has(key)) groups.set(key, []); groups.get(key).push(w); });
-  return `<div class="diary-toolbar"><div class="segmented" aria-label="Тип тренировки">${[['all', 'Все тренировки'], ['regular', 'Обычные'], ['timed', 'На время']].map(([key, label]) => `<button data-action="filter-type" data-value="${key}" aria-pressed="${filterType === key}" class="${filterType === key ? 'selected' : ''}">${label}</button>`).join('')}</div><div class="diary-inputs"><label class="search-box">${icon('search')}<input id="diary-search" type="search" placeholder="Найти в дневнике" aria-label="Поиск по комментариям, стилю и дистанции" maxlength="200" value="${esc(filterSearch)}"></label><select id="diary-month" aria-label="Месяц тренировок"><option value="">Все месяцы</option>${months.map(key => `<option value="${key}" ${filterMonth === key ? 'selected' : ''}>${monthLabel(key)}</option>`).join('')}</select></div></div>
+  return `<div class="diary-toolbar"><div class="segmented" aria-label="Тип тренировки">${[['all', 'Все тренировки'], ['COMPLETED', 'Выполнены'], ['PLANNED', 'В планах']].map(([key, label]) => `<button data-action="filter-type" data-value="${key}" aria-pressed="${filterType === key}" class="${filterType === key ? 'selected' : ''}">${label}</button>`).join('')}</div><div class="diary-inputs"><label class="search-box">${icon('search')}<input id="diary-search" type="search" placeholder="Найти в дневнике" aria-label="Поиск по комментариям, стилю и дистанции" maxlength="200" value="${esc(filterSearch)}"></label><select id="diary-month" aria-label="Месяц тренировок"><option value="">Все месяцы</option>${months.map(key => `<option value="${key}" ${filterMonth === key ? 'selected' : ''}>${monthLabel(key)}</option>`).join('')}</select></div></div>
     <div class="diary-count">${items.length} ${plural(items.length, 'запись', 'записи', 'записей')} <span>Всё начинается с одного заплыва</span></div>
-    ${items.length ? [...groups].map(([key, entries]) => `<section class="diary-group"><div class="section-intro"><h2>${monthLabel(key)}</h2><span class="muted">${number(entries.reduce((sum, w) => sum + (totalDistance(w) || 0), 0))} м</span></div><div class="panel diary-list">${entries.map(w => workoutRow(w)).join('')}</div></section>`).join('') : `<section class="panel">${emptyState(workouts.length ? 'Таких записей пока нет' : 'Ваша история начинается здесь', workouts.length ? 'Попробуйте другой месяц, тип тренировки или поисковый запрос.' : 'Добавляйте тренировки с результатами или просто отмечайте дни, проведённые в бассейне.', workouts.length ? 'reset-filters' : 'add', workouts.length ? 'Сбросить фильтры' : 'Добавить тренировку', 'book')}</section>`}`;
+    ${items.length ? [...groups].map(([key, entries]) => `<section class="diary-group"><div class="section-intro"><h2>${monthLabel(key)}</h2><span class="muted">${number(entries.filter(w => w.status === 'COMPLETED').reduce((sum, w) => sum + (totalDistance(w) || 0), 0))} м</span></div><div class="panel diary-list">${entries.map(w => workoutRow(w)).join('')}</div></section>`).join('') : `<section class="panel">${emptyState(workouts.length ? 'Таких записей пока нет' : 'Ваша история начинается здесь', workouts.length ? 'Попробуйте другой месяц, тип тренировки или поисковый запрос.' : 'Добавляйте тренировки с результатами или просто отмечайте дни, проведённые в бассейне.', workouts.length ? 'reset-filters' : 'add', workouts.length ? 'Сбросить фильтры' : 'Добавить тренировку', 'book')}</section>`}`;
 }
 function barChart(series, metric, label, unit, weekly = false) {
   const max = Math.max(...series.map(item => item[metric]), 1);
@@ -187,8 +192,8 @@ function statistics(stats) {
     </section>
     <section class="charts-grid"><article class="panel chart-panel"><div class="panel-heading"><div><p class="eyebrow">РЕГУЛЯРНОСТЬ</p><h2>Встречи с водой</h2></div><div class="segmented small">${[['week', 'Недели'], ['month', 'Месяцы']].map(([key, label]) => `<button data-action="chart-period" data-value="${key}" class="${chartPeriod === key ? 'selected' : ''}" aria-pressed="${chartPeriod === key}">${label}</button>`).join('')}</div></div><p class="chart-description">Количество тренировок · ${chartPeriod === 'week' ? '8 последних недель' : '6 последних месяцев'}</p>${barChart(chartPeriod === 'week' ? weeklySeries(workouts, today) : months, 'count', 'Количество тренировок', 'тренировок', chartPeriod === 'week')}</article>
     <article class="panel chart-panel"><div class="panel-heading"><div><p class="eyebrow">ДИСТАНЦИЯ</p><h2>Метр за метром</h2></div><span class="chart-unit">метры</span></div><p class="chart-description">Известная дистанция · 6 последних месяцев</p>${barChart(months, 'distance', 'Дистанция по месяцам', 'м')}</article></section>
-    <article class="panel pace-panel"><div class="panel-heading"><div><p class="eyebrow">ЗАПЛЫВЫ НА ВРЕМЯ</p><h2>Как меняется ваш темп</h2></div>${records.length ? `<select id="pace-selection" aria-label="Дистанция и стиль для графика темпа">${records.map(w => `<option value="${recordKey(w)}" ${recordKey(w) === selectedPace ? 'selected' : ''}>${w.distance} м · ${STYLES[w.style]}</option>`).join('')}</select>` : ''}</div><p class="chart-description">Минуты и секунды на 100 м. Меньше время — быстрее заплыв.</p>${records.length ? paceChart(paceSeries(workouts, selectedPace)) : emptyState('У вашего прогресса будет своя линия', 'Добавьте заплыв на время. Результаты сравниваются только на одинаковой дистанции и в одном стиле.', 'add-timed', 'Записать результат', 'chart')}</article>
-    <article class="panel records-panel"><div class="panel-heading"><div><p class="eyebrow">ЛИЧНЫЕ ДОСТИЖЕНИЯ</p><h2>Ваши лучшие заплывы</h2></div><span class="record-badge">${icon('trophy')} Маленькие победы</span></div>${records.length ? `<div class="table-wrap"><table><thead><tr><th>Дистанция и стиль</th><th>Результат</th><th>Темп / 100 м</th><th>Дата</th><th><span class="sr-only">Подробнее</span></th></tr></thead><tbody>${records.map(w => `<tr><td><strong>${w.distance} м</strong><span class="table-style">${STYLES[w.style]}</span></td><td class="best-time">${formatTime(w.result)}</td><td>${formatTime(pace(w))}</td><td>${dateLabel(w.date, { day: 'numeric', month: 'short', year: 'numeric' })}</td><td><button class="icon-button" data-action="detail" data-id="${esc(w.id)}" aria-label="Открыть рекорд ${w.distance} м ${STYLES[w.style]}">${icon('arrow')}</button></td></tr>`).join('')}</tbody></table></div>` : `<p class="records-empty">Здесь появятся лучшие результаты для каждой дистанции и стиля. Соревнуйтесь только с собой — и только если хочется.</p>`}</article>`;
+    <article class="panel pace-panel"><div class="panel-heading"><div><p class="eyebrow">ЗАПЛЫВЫ НА ВРЕМЯ</p><h2>Как меняется ваш темп</h2></div>${records.length ? `<select id="pace-selection" aria-label="Дистанция и стиль для графика темпа">${records.map(w => `<option value="${esc(recordKey(w))}" ${recordKey(w) === selectedPace ? 'selected' : ''}>${w.distance} м · ${STYLES[w.style]}${w.technique ? ' · ' + esc(w.technique) : ''}</option>`).join('')}</select>` : ''}</div><p class="chart-description">Темп на 100 м. Результаты с уточнением техники учитываются отдельно от обычного стиля.</p>${records.length ? paceChart(paceSeries(workouts, selectedPace)) : emptyState('У вашего прогресса будет своя линия', 'Добавьте заплыв на время. Результаты сравниваются только на одинаковой дистанции и в одном стиле и с одинаковым уточнением техники.', 'add-timed', 'Записать результат', 'chart')}</article>
+    <article class="panel records-panel"><div class="panel-heading"><div><p class="eyebrow">ЛИЧНЫЕ ДОСТИЖЕНИЯ</p><h2>Ваши лучшие заплывы</h2></div><span class="record-badge">${icon('trophy')} Маленькие победы</span></div>${records.length ? `<div class="table-wrap"><table><thead><tr><th>Дистанция и стиль</th><th>Результат</th><th>Темп / 100 м</th><th>Дата</th><th><span class="sr-only">Подробнее</span></th></tr></thead><tbody>${records.map(w => `<tr><td><strong>${w.distance} м</strong><span class="table-style">${STYLES[w.style]}${w.technique ? ' · ' + esc(w.technique) : ''}</span></td><td class="best-time">${formatCentiseconds(w.timeCs)}</td><td>${formatCentiseconds(pace(w) * 100)}</td><td>${dateLabel(w.date, { day: 'numeric', month: 'short', year: 'numeric' })}</td><td><button class="icon-button" data-action="detail" data-id="${esc(w.id)}" aria-label="Открыть рекорд ${w.distance} м ${STYLES[w.style]}">${icon('arrow')}</button></td></tr>`).join('')}</tbody></table></div>` : `<p class="records-empty">Здесь появятся лучшие результаты для каждой дистанции и стиля. Соревнуйтесь только с собой — и только если хочется.</p>`}</article>`;
 }
 function paceChart(series) {
   const width = 820, height = 190, pad = 35;
@@ -197,29 +202,29 @@ function paceChart(series) {
   const x = i => series.length === 1 ? width / 2 : 66 + i / (series.length - 1) * (width - 100);
   const y = value => pad + (max - value) / (max - min) * (height - pad * 2);
   return `${series.length === 1 ? '<p class="single-point-note">Первая точка есть. После следующего такого заплыва появится линия прогресса.</p>' : ''}
-    <div class="pace-chart"><svg viewBox="0 0 ${width} ${height + 30}" role="img" aria-label="Динамика темпа: ${series.map(w => `${dateLabel(w.date)}, ${formatTime(w.pace)} на 100 метров`).join('; ')}">
+    <div class="pace-chart"><svg viewBox="0 0 ${width} ${height + 30}" role="img" aria-label="Динамика темпа: ${series.map(w => `${dateLabel(w.date)}, ${formatCentiseconds(w.pace * 100)} на 100 метров`).join('; ')}">
     ${[min, (min + max) / 2, max].map(value => `<line x1="58" x2="${width - 20}" y1="${y(value)}" y2="${y(value)}" stroke="#e8ecec" stroke-dasharray="4 5"/><text x="0" y="${y(value) + 4}" fill="#6b7d86" font-size="12">${formatTime(value)}</text>`).join('')}
     ${series.length > 1 ? `<polyline points="${series.map((w, i) => `${x(i)},${y(w.pace)}`).join(' ')}" fill="none" stroke="#667f91" stroke-width="3" stroke-linejoin="round"/>` : ''}
-    ${series.map((w, i) => `<circle cx="${x(i)}" cy="${y(w.pace)}" r="5" fill="${i === series.length - 1 ? '#D66A65' : '#667f91'}" stroke="#fff" stroke-width="2"><title>${dateLabel(w.date)}: ${formatTime(w.pace)} / 100 м</title></circle>${series.length <= 8 || i === 0 || i === series.length - 1 ? `<text x="${x(i)}" y="${height + 14}" text-anchor="middle" fill="#6b7d86" font-size="12">${dateLabel(w.date, { day: 'numeric', month: 'short' })}</text>` : ''}`).join('')}
-    </svg></div><details class="chart-data"><summary>Все результаты на этой дистанции (${series.length})</summary><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Результат</th><th>Темп / 100 м</th></tr></thead><tbody>${series.map(w => `<tr><td>${dateLabel(w.date, { day: 'numeric', month: 'long', year: 'numeric' })}</td><td>${formatTime(w.result)}</td><td>${formatTime(w.pace)}</td></tr>`).join('')}</tbody></table></div></details>`;
+    ${series.map((w, i) => `<circle cx="${x(i)}" cy="${y(w.pace)}" r="5" fill="${i === series.length - 1 ? '#D66A65' : '#667f91'}" stroke="#fff" stroke-width="2"><title>${dateLabel(w.date)}: ${formatCentiseconds(w.pace * 100)} / 100 м</title></circle>${series.length <= 8 || i === 0 || i === series.length - 1 ? `<text x="${x(i)}" y="${height + 14}" text-anchor="middle" fill="#6b7d86" font-size="12">${dateLabel(w.date, { day: 'numeric', month: 'short' })}</text>` : ''}`).join('')}
+    </svg></div><details class="chart-data"><summary>Все результаты на этой дистанции (${series.length})</summary><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Результат</th><th>Темп / 100 м</th></tr></thead><tbody>${series.map(w => `<tr><td>${dateLabel(w.date, { day: 'numeric', month: 'long', year: 'numeric' })}</td><td>${formatCentiseconds(w.timeCs)}</td><td>${formatCentiseconds(w.pace * 100)}</td></tr>`).join('')}</tbody></table></div></details>`;
 }
 function openModal(title, body, wide = false) {
+  activeEditor?.dispose(); activeEditor = null;
   lastFocus = document.activeElement;
   modalRoot.innerHTML = `<dialog class="modal ${wide ? 'wide' : ''}" aria-labelledby="modal-title"><div class="modal-heading"><h2 id="modal-title">${title}</h2><button class="icon-button" data-action="close-modal" aria-label="Закрыть окно">${icon('close')}</button></div>${body}</dialog>`;
   const dialog = modalRoot.querySelector('dialog');
   document.body.classList.add('modal-open');
   dialog.showModal();
   dialog.addEventListener('cancel', event => { event.preventDefault(); closeModal(); });
-  dialog.addEventListener('click', event => {
-    const rect = dialog.getBoundingClientRect();
-    if (event.target === dialog && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) closeModal();
-  });
 }
-function closeModal() {
+function closeModal(force = false) {
+  if (!force && activeEditor && !activeEditor.canClose()) return false;
+  activeEditor?.dispose(); activeEditor = null;
   modalRoot.querySelector('dialog')?.close();
   modalRoot.innerHTML = '';
   document.body.classList.remove('modal-open');
   if (lastFocus?.isConnected) lastFocus.focus();
+  return true;
 }
 function showCreateChoice(initialDate = today, timed = false) {
   openModal('Добавить тренировку', `<p class="modal-subtitle">Начните с пустой формы или возьмите за основу знакомый план.</p>
@@ -228,7 +233,7 @@ function showCreateChoice(initialDate = today, timed = false) {
       <button class="button secondary creation-option" id="create-template">${icon('book')}<span>На основе предыдущей<small>Выбрать тренировку и скопировать её план</small></span></button>
     </div>`);
   document.querySelector('#create-empty').addEventListener('click', () => {
-    const seed = timed ? { exercises: [newExercise(true)] } : null;
+    const seed = timed ? { blocks: [newBlock()] } : null;
     showForm(null, initialDate, seed);
   });
   document.querySelector('#create-template').addEventListener('click', showTemplatePicker);
@@ -239,165 +244,79 @@ function showTemplatePicker() {
     <div id="template-results" class="template-results"></div>`);
   const renderTemplates = query => {
     const items = templateWorkouts(workouts, query);
-    document.querySelector('#template-results').innerHTML = items.length ? items.map(w => `<button class="template-row" data-action="copy-template" data-id="${esc(w.id)}"><span><strong>${esc(w.title || 'Без названия')}</strong><small>${dateLabel(w.date, { day: 'numeric', month: 'long', year: 'numeric' })}</small></span><span><strong>${distanceLabel(totalDistance(w))}</strong><small>${w.exercises.length} ${plural(w.exercises.length, 'задание', 'задания', 'заданий')}</small></span>${icon('right')}</button>`).join('') : `<p class="records-empty">${workouts.length ? 'Тренировки с таким названием не найдены.' : 'Сохранённых тренировок пока нет. Начните с новой тренировки.'}</p>`;
+    document.querySelector('#template-results').innerHTML = items.length ? items.map(w => `<button class="template-row" data-action="copy-template" data-id="${esc(w.id)}"><span><strong>${esc(w.title || 'Без названия')}</strong><small>${dateLabel(w.date, { day: 'numeric', month: 'long', year: 'numeric' })}</small></span><span><strong>${distanceLabel(totalDistance(w))}</strong><small>${exercisesOf(w).length} ${plural(exercisesOf(w).length, 'задание', 'задания', 'заданий')}</small></span>${icon('right')}</button>`).join('') : `<p class="records-empty">${workouts.length ? 'Тренировки с таким названием не найдены.' : 'Сохранённых тренировок пока нет. Начните с новой тренировки.'}</p>`;
   };
   renderTemplates('');
   document.querySelector('#template-search').addEventListener('input', event => renderTemplates(event.target.value));
 }
-function newExercise(timed = false) {
-  return { id: crypto.randomUUID(), distance: null, style: 'freestyle', description: '', duration: null, timed, result: null };
-}
-function timeInputs(name, value, label) {
-  return `<div class="duration-inputs"><div class="input-unit"><input name="${name}-minutes" aria-label="${label}: минуты" type="number" min="0" max="10080" step="1" inputmode="numeric" placeholder="00" value="${value === null ? '' : Math.floor(value / 60)}"><span>мин</span></div><span>:</span><div class="input-unit"><input name="${name}-seconds" aria-label="${label}: секунды" type="number" min="0" max="59" step="1" inputmode="numeric" placeholder="00" value="${value === null ? '' : value % 60}"><span>сек</span></div></div>`;
-}
-function exerciseEditor(exercise) {
-  return `<fieldset class="exercise-editor" data-id="${esc(exercise.id)}"><legend>Задание</legend>
-    <div class="exercise-toolbar"><span class="eyebrow exercise-number"></span><div>
-      <button type="button" class="icon-button" data-exercise-action="up" aria-label="Переместить задание выше">↑</button>
-      <button type="button" class="icon-button" data-exercise-action="down" aria-label="Переместить задание ниже">↓</button>
-      <button type="button" class="icon-button" data-exercise-action="remove" aria-label="Удалить задание">${icon('trash')}</button>
-    </div></div>
-    <label class="field"><span>Название или описание <small>необязательно</small></span><input name="exercise-description" maxlength="500" placeholder="Например, разминка или работа над техникой" value="${esc(exercise.description)}"></label>
-    <div class="form-grid exercise-fields"><label class="field"><span>Дистанция задания <b>*</b></span><div class="input-unit"><input name="exercise-distance" type="number" min="1" max="100000" step="1" inputmode="numeric" placeholder="100" value="${exercise.distance ?? ''}" required><span>м</span></div></label>
-    <label class="field"><span>Стиль плавания <b>*</b></span><select name="exercise-style">${Object.entries(STYLES).map(([key, name]) => `<option value="${key}" ${exercise.style === key ? 'selected' : ''}>${name}</option>`).join('')}</select></label>
-    <div class="field"><span>Продолжительность задания <small>необязательно</small></span>${timeInputs('exercise-duration', exercise.duration, 'Продолжительность задания')}</div>
-    <label class="timed-toggle"><input name="exercise-timed" type="checkbox" ${exercise.timed ? 'checked' : ''}>${icon('clock')} На время</label></div>
-    <div class="exercise-result" ${exercise.timed ? '' : 'hidden'}><div class="field"><span>Результат заплыва <small>можно заполнить позже</small></span>${timeInputs('exercise-result', exercise.result, 'Результат заплыва')}</div><p class="exercise-pace"></p></div>
-    <p class="exercise-hint">Продолжительность задания и результат заплыва учитываются отдельно.</p>
-  </fieldset>`;
-}
-function readTime(container, name, label, strict = true) {
-  const min = container.querySelector(`[name="${name}-minutes"]`);
-  const sec = container.querySelector(`[name="${name}-seconds"]`);
-  const invalid = min.validity.badInput || sec.validity.badInput ||
-    (min.value && !/^\d+$/.test(min.value)) || (sec.value && !/^\d+$/.test(sec.value)) || Number(sec.value) > 59;
-  if (invalid) {
-    if (strict) throw new Error(`${label}: минуты — целое неотрицательное число, секунды — от 0 до 59.`);
-    return null;
-  }
-  return min.value || sec.value ? Number(min.value) * 60 + Number(sec.value) : null;
-}
 function showForm(existing = null, initialDate = today, seed = null) {
   const w = structuredClone(existing || {
-    id: crypto.randomUUID(), date: initialDate, title: '', distance: null, duration: null,
-    style: '', comment: '', exercises: [], createdAt: new Date().toISOString(), ...seed,
+    id: crypto.randomUUID(), date: initialDate, title: '', status: 'PLANNED', blocks: [],
+    distance: null, durationCs: null, style: '', comment: '', createdAt: new Date().toISOString(), ...seed,
   });
   const baseline = existing ? JSON.stringify(existing) : null;
-  openModal(existing ? 'Редактировать тренировку' : seed?.title ? 'Тренировка на основе предыдущей' : 'Новая тренировка', `
-    <p class="modal-subtitle">Задания — ваш план. Результаты — ваша новая история.</p>
-    <form id="workout-form" novalidate>
-      <div class="form-grid"><label class="field"><span>Дата <b>*</b></span><input name="date" type="date" value="${w.date}" min="1900-01-01" max="${today}" required></label>
-      <label class="field"><span>Название тренировки <small>необязательно</small></span><input name="title" maxlength="200" placeholder="Например, техника и выносливость" value="${esc(w.title)}"></label></div>
-      <div class="section-intro"><h2>Задания</h2><button type="button" class="text-link" id="add-exercise">${icon('plus')}Добавить задание</button></div>
-      <p id="no-exercises" class="chart-description">Можно сохранить тренировку без заданий и указать общие значения вручную.</p>
-      <div id="exercise-editors">${w.exercises.map(exerciseEditor).join('')}</div>
-      <div class="form-grid training-totals">
-        <div><label class="field" id="manual-distance-field"><span>Общая дистанция <small>необязательно</small></span><div class="input-unit"><input name="distance" type="number" min="1" max="100000" step="1" inputmode="numeric" value="${w.distance ?? ''}"><span>м</span></div></label><div id="calculated-distance" class="calculated-total" hidden></div></div>
-        <div><div class="field" id="manual-duration-field"><span>Общая продолжительность <small>необязательно</small></span>${timeInputs('training-duration', w.duration, 'Общая продолжительность')}</div><div id="calculated-duration" class="calculated-total" hidden></div></div>
-      </div>
-      <p id="duration-note" class="chart-description"></p>
-      ${w.style ? `<label class="field legacy-style-field"><span>Стиль исходной записи</span><select name="legacy-style"><option value="">Не указан</option>${Object.entries(STYLES).map(([key, name]) => `<option value="${key}" ${w.style === key ? 'selected' : ''}>${name}</option>`).join('')}</select></label>` : ''}
-      <label class="field comment-field"><span>Общий комментарий и самочувствие <small>необязательно</small></span><textarea name="comment" rows="3" maxlength="2000" placeholder="Как прошла тренировка?">${esc(w.comment)}</textarea></label>
-      <p class="form-note">${icon('shield')}${demo ? 'Режим примера: запись останется только в этой сессии.' : 'Запись сохранится только после нажатия кнопки сохранения.'}</p>
-      <div id="form-error" class="form-error" role="alert" tabindex="-1" hidden></div>
-      <div class="modal-actions"><button type="button" class="button secondary" data-action="close-modal">Отмена</button><button type="submit" class="button primary">${icon('check')}${existing ? 'Сохранить изменения' : 'Сохранить тренировку'}</button></div>
-    </form>`, true);
-  const form = document.querySelector('#workout-form');
-  const list = document.querySelector('#exercise-editors');
-  const readExercises = (strict = true) => [...list.children].map((card, index) => {
-    const field = name => card.querySelector(`[name="exercise-${name}"]`);
-    if (strict && field('distance').validity.badInput) throw new Error(`Задание ${index + 1}: введите корректную дистанцию.`);
-    return {
-      id: card.dataset.id, description: field('description').value, style: field('style').value,
-      distance: field('distance').value ? Number(field('distance').value) : null,
-      duration: readTime(card, 'exercise-duration', `Задание ${index + 1}`, strict),
-      timed: field('timed').checked,
-      result: field('timed').checked ? readTime(card, 'exercise-result', `Результат задания ${index + 1}`, strict) : null,
-    };
-  });
-  const updateTotals = () => {
-    const exercises = readExercises(false);
-    [...list.children].forEach((card, index) => {
-      const exercise = exercises[index];
-      card.querySelector('legend').textContent = `Задание ${index + 1}`;
-      card.querySelector('.exercise-number').textContent = `${index + 1} / ${exercises.length}`;
-      card.querySelector('[data-exercise-action="up"]').disabled = index === 0;
-      card.querySelector('[data-exercise-action="down"]').disabled = index === exercises.length - 1;
-      card.querySelector('.exercise-result').hidden = !exercise.timed;
-      const value = pace(exercise);
-      card.querySelector('.exercise-pace').textContent = value === null ? 'Без результата задание не участвует в рекордах.' : `Темп: ${formatTime(value)} / 100 м`;
-    });
-    document.querySelector('#no-exercises').hidden = exercises.length > 0;
-    document.querySelector('#manual-distance-field').hidden = exercises.length > 0;
-    const distance = document.querySelector('#calculated-distance');
-    distance.hidden = !exercises.length;
-    distance.innerHTML = `<span>Общая дистанция · из заданий</span><strong>${exercises.every(e => e.distance > 0) ? distanceLabel(totalDistance({ exercises })) : 'Укажите дистанции заданий'}</strong>`;
-    const complete = hasCompleteDurations({ exercises }) && exercises.every(e => e.duration > 0);
-    document.querySelector('#manual-duration-field').hidden = complete;
-    const duration = document.querySelector('#calculated-duration');
-    duration.hidden = !complete;
-    duration.innerHTML = `<span>Общая продолжительность · из заданий</span><strong>${complete ? formatTime(totalDuration({ exercises })) + ' мин:сек' : '—'}</strong>`;
-    document.querySelector('#duration-note').textContent = complete ? 'У всех заданий указана продолжительность — суммируем её автоматически.' : exercises.length ? 'Продолжительность заполнена не у всех заданий. При желании укажите общее время вручную.' : 'Дистанцию и продолжительность можно оставить пустыми.';
-  };
-  document.querySelector('#add-exercise').addEventListener('click', () => {
-    list.insertAdjacentHTML('beforeend', exerciseEditor(newExercise()));
-    updateTotals();
-    list.lastElementChild.querySelector('input').focus();
-  });
-  list.addEventListener('click', event => {
-    const button = event.target.closest('[data-exercise-action]');
-    if (!button) return;
-    const card = button.closest('.exercise-editor');
-    if (button.dataset.exerciseAction === 'remove') card.remove();
-    else if (button.dataset.exerciseAction === 'up' && card.previousElementSibling) list.insertBefore(card, card.previousElementSibling);
-    else if (button.dataset.exerciseAction === 'down' && card.nextElementSibling) list.insertBefore(card.nextElementSibling, card);
-    updateTotals();
-  });
-  form.addEventListener('input', updateTotals);
-  form.addEventListener('change', updateTotals);
-  updateTotals();
-  form.addEventListener('submit', event => {
-    event.preventDefault();
-    const errorBox = document.querySelector('#form-error');
-    try {
-      const data = new FormData(form);
-      const exercises = readExercises();
-      if (!exercises.length && form.elements.distance.validity.badInput) throw new Error('Введите корректную общую дистанцию.');
-      const candidate = validateWorkout({
-        ...w, date: data.get('date'), title: data.get('title'), comment: data.get('comment'), exercises,
-        distance: exercises.length ? null : data.get('distance').trim() ? Number(data.get('distance')) : null,
-        duration: hasCompleteDurations({ exercises }) ? null : readTime(form, 'training-duration', 'Общая продолжительность'),
-        style: data.get('legacy-style') ?? w.style,
-      }, today);
+  openModal(existing ? 'Редактировать тренировку' : 'Новая тренировка', editorHTML(w), true);
+  activeEditor = mountEditor(w, {
+    today: () => today,
+    onDiscard: () => closeModal(true),
+    onSave: candidate => {
       if (existing && JSON.stringify(workouts.find(item => item.id === existing.id)) !== baseline) throw new Error('Эта запись изменилась в другой вкладке. Закройте окно и откройте запись заново.');
       persist(existing ? workouts.map(item => item.id === candidate.id ? candidate : item) : [...workouts, candidate]);
-      closeModal(); render();
-      toast(existing ? 'Изменения сохранены' : demo ? 'Тренировка добавлена в пример' : 'Тренировка сохранена');
-    } catch (error) { errorBox.textContent = error.message; errorBox.hidden = false; errorBox.focus(); }
+      closeModal(true); render(); toast('Тренировка сохранена');
+    },
   });
 }
 function exerciseList(w, comparisons = false) {
   const records = personalBests(workouts);
-  const swims = timedResults([w]);
-  return `<ol class="exercise-list">${w.exercises.map(exercise => {
-    const swim = swims.find(item => item.exerciseId === exercise.id);
-    const best = records.some(item => item.id === w.id && item.exerciseId === exercise.id);
-    const previous = comparisons && swim ? previousResult(workouts, swim) : null;
-    const difference = previous ? exercise.result - previous.result : null;
-    return `<li><div class="exercise-summary"><strong>${esc(exercise.description || 'Задание')} ${best ? `<span class="record-marker" aria-label="Личный рекорд">${icon('trophy')}</span>` : ''}</strong><span>${distanceLabel(exercise.distance)} · ${STYLES[exercise.style]}</span></div>
-      <p>Продолжительность: ${exercise.duration === null ? 'не указана' : `${formatTime(exercise.duration)} мин:сек`}</p>
-      ${exercise.timed ? `<p class="exercise-result-text">На время · ${exercise.result === null ? 'результат пока не указан' : `${formatTime(exercise.result)} · темп ${formatTime(pace(exercise))} / 100 м`}</p>` : ''}
-      ${comparisons && swim ? `<p class="exercise-comparison">${previous ? `${difference < 0 ? 'Быстрее' : difference > 0 ? 'Дольше' : 'Без изменения'}${difference ? ` на ${formatTime(Math.abs(difference))}` : ''}. Предыдущий результат: ${formatTime(previous.result)}, ${dateLabel(previous.date)}.` : 'Первый результат на этой дистанции в этом стиле.'}</p>` : ''}</li>`;
-  }).join('')}</ol>`;
+  const swims = comparisons ? timedResults([w]) : [];
+  return w.blocks.map(b => `<section class="program-block compact-program"><h3>${esc(b.title)} · ${b.rounds} ${plural(b.rounds, 'круг', 'круга', 'кругов')} · ${blockDistance(b)} м</h3><div class="diary-exercises">${b.exercises.map(e => {
+    const overview = resultOverview(resultDraft(e), b.rounds);
+    const best = records.some(r => r.id === w.id && r.exerciseId === e.id);
+    const timeLabel = overview.best === null ? 'Добавить время' : overview.best < 6000 ? `${(overview.best / 100).toFixed(2)} с` : formatCentiseconds(overview.best);
+    const countLabel = b.rounds === 1 ? '' : e.resultMode === 'best' ? (overview.count ? 'Круг неизвестен' : '') : `${overview.count} из ${b.rounds} результатов`;
+    const history = comparisons ? e.results.map(r => {
+      const swim = swims.find(s => s.resultId === r.id);
+      const previous = swim ? previousResult(workouts, swim) : null;
+      const delta = previous ? r.timeCs - previous.timeCs : null;
+      return `<li>${r.round === null ? 'Круг неизвестен' : `Круг ${r.round}`} · ${formatCentiseconds(r.timeCs)}${previous ? `<p>${delta < 0 ? 'Быстрее' : delta > 0 ? 'Дольше' : 'Без изменения'}${delta ? ' на ' + formatCentiseconds(Math.abs(delta)) : ''}. Предыдущий: ${formatCentiseconds(previous.timeCs)}.</p>` : ''}</li>`;
+    }).join('') : '';
+    return `<div class="diary-exercise"><button class="exercise-quick-button" data-action="quick-results" data-id="${esc(w.id)}" data-exercise-id="${esc(e.id)}" aria-label="Времена: ${e.distance} м ${STYLES[e.style]}${e.technique ? ' ' + esc(e.technique) : ''}, ${esc(timeLabel)}"><span class="exercise-quick-info"><strong>${e.distance} м · ${STYLES[e.style]}${e.technique ? ' · ' + esc(e.technique) : ''}</strong>${e.description ? `<span class="exercise-description-caption">${esc(e.description)}</span>` : ''}${countLabel ? `<small>${esc(countLabel)}</small>` : ''}</span><span class="exercise-quick-time" ${overview.best === null ? '' : 'title="Лучшее время в этом упражнении"'}>${best ? `<span class="record-marker" aria-label="Личный рекорд">${icon('trophy')}</span>` : ''}<span>${esc(timeLabel)}</span>${icon('clock')}</span></button>
+      ${comparisons && (history || e.plannedTimeCs || e.restAfterCs || e.legacy?.durationCs) ? `<details class="exercise-extra"><summary>Подробности</summary>${e.plannedTimeCs ? `<p>План: ${formatCentiseconds(e.plannedTimeCs)}</p>` : ''}${e.restAfterCs ? `<p>Отдых после упражнения: ${formatCentiseconds(e.restAfterCs)} (кроме последнего в круге)</p>` : ''}${e.legacy?.durationCs ? `<p>Старая продолжительность: ${formatCentiseconds(e.legacy.durationCs)}</p>` : ''}${history ? `<ul class="exercise-list">${history}</ul>` : ''}</details>` : ''}</div>`;
+  }).join('')}</div>${comparisons && (b.restBetweenCs || b.restAfterCs) ? `<details class="exercise-extra"><summary>Отдых в блоке</summary>${b.rounds > 1 && b.restBetweenCs ? `<p>Между кругами: ${formatCentiseconds(b.restBetweenCs)}</p>` : ''}${b.restAfterCs ? `<p>После блока: ${formatCentiseconds(b.restAfterCs)}</p>` : ''}</details>` : ''}</section>`).join('');
+}
+function showQuickResults(id, exerciseId) {
+  const w = workouts.find(item => item.id === id);
+  const block = w?.blocks.find(b => b.exercises.some(e => e.id === exerciseId));
+  const exercise = block?.exercises.find(e => e.id === exerciseId);
+  if (!exercise) return toast('Упражнение уже удалено.');
+  const baseline = JSON.stringify(w);
+  openModal(`${exercise.distance} м · ${STYLES[exercise.style]}`, `<p class="modal-subtitle">${esc(block.title)} · ${block.rounds} ${plural(block.rounds, 'круг', 'круга', 'кругов')}${exercise.technique ? ' · ' + esc(exercise.technique) : ''}${w.status === 'PLANNED' ? ' · черновик' : ''}</p>
+    <form id="quick-results-form" novalidate>${resultsEditorHTML(exercise, block.rounds, true)}<div id="quick-error" class="form-error" role="alert" tabindex="-1" hidden></div>${discardHTML()}<div class="modal-actions"><button type="button" class="button secondary" data-action="close-modal">Отмена</button><button type="submit" class="button primary">Сохранить</button></div></form>`);
+  const form = document.querySelector('#quick-results-form');
+  const editor = mountResultsEditor(form.querySelector('.inline-results'), exercise, block.rounds);
+  activeEditor = protectEditor(form, () => JSON.stringify(editor.getDraft()), () => closeModal(true));
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    try {
+      if (JSON.stringify(workouts.find(item => item.id === id)) !== baseline) throw new Error('Тренировка изменилась в другой вкладке. Откройте её заново.');
+      const updated = validateWorkout(withExerciseResults(w, exerciseId, editor.getDraft()), today);
+      persist(workouts.map(item => item.id === id ? updated : item));
+      closeModal(true); render();
+      app.querySelectorAll('.exercise-quick-button').forEach(button => {
+        if (button.dataset.id === id && button.dataset.exerciseId === exerciseId) { const disclosure = button.closest('details'); if (disclosure) disclosure.open = true; }
+      });
+      toast(w.status === 'PLANNED' ? 'Черновые результаты сохранены' : 'Результаты сохранены');
+    } catch (reason) { const error = form.querySelector('#quick-error'); error.textContent = reason.message; error.hidden = false; error.focus(); }
+  });
 }
 function showDetail(id) {
   const w = workouts.find(item => item.id === id);
   if (!w) return toast('Запись уже удалена.');
   const duration = totalDuration(w);
   openModal(esc(w.title || 'Тренировка'), `
-    <p class="modal-subtitle">${dateLabel(w.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · ${w.exercises.length} ${plural(w.exercises.length, 'задание', 'задания', 'заданий')}</p>
-    <div class="detail-grid"><div><span>Общая дистанция</span><strong>${distanceLabel(totalDistance(w))}</strong></div><div><span>Общая продолжительность</span><strong>${formatTime(duration)} <small>${duration === null ? '' : 'мин:сек'}</small></strong></div>${w.style ? `<div><span>Стиль исходной записи</span><strong>${STYLES[w.style]}</strong></div>` : ''}</div>
-    ${w.exercises.length ? exerciseList(w, true) : '<p class="records-empty">Тренировка без отдельных заданий.</p>'}
+    <p class="modal-subtitle">${w.status === 'PLANNED' ? 'Запланирована' : 'Выполнена'} · ${dateLabel(w.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · ${exercisesOf(w).length} ${plural(exercisesOf(w).length, 'задание', 'задания', 'заданий')}</p>
+    <div class="detail-grid"><div><span>Общая дистанция</span><strong>${distanceLabel(totalDistance(w))}</strong></div><div><span>Общая продолжительность</span><strong>${formatCentiseconds(w.durationCs)} <small>${duration === null ? '' : 'мин:сек'}</small></strong></div>${w.style ? `<div><span>Стиль исходной записи</span><strong>${STYLES[w.style]}</strong></div>` : ''}</div>
+    ${exercisesOf(w).length ? exerciseList(w, true) : '<p class="records-empty">Тренировка без отдельных заданий.</p>'}
     <div class="detail-comment"><span class="eyebrow">ОБЩИЙ КОММЕНТАРИЙ И САМОЧУВСТВИЕ</span><p>${w.comment ? esc(w.comment) : 'Комментария нет.'}</p></div>
     <button class="text-link" data-action="copy-template" data-id="${esc(w.id)}">${icon('plus')}Создать на основе этой тренировки</button>
     <div class="modal-actions between"><button class="button danger-quiet" data-action="delete" data-id="${esc(w.id)}">${icon('trash')}Удалить</button><button class="button secondary" data-action="edit" data-id="${esc(w.id)}">${icon('edit')}Редактировать</button></div>`);
@@ -405,7 +324,7 @@ function showDetail(id) {
 
 function showDay(date) {
   const entries = sortedWorkouts(workouts.filter(w => w.date === date));
-  openModal(dateLabel(date, { day: 'numeric', month: 'long', year: 'numeric' }), `<p class="modal-subtitle">${entries.length ? `${entries.length} ${plural(entries.length, 'тренировка', 'тренировки', 'тренировок')} в этот день` : 'В этот день записей нет'}</p>${entries.map(w => workoutRow(w, true)).join('')}${!entries.length ? `<div class="day-empty">${icon('wave')}<p>${date > today ? 'История появится, когда этот день наступит.' : 'Возможно, здесь будет ещё один хороший день в воде.'}</p></div>` : ''}${date <= today ? `<div class="modal-actions"><button class="button primary" data-action="add-date" data-date="${date}">${icon('plus')}Добавить тренировку</button></div>` : ''}`);
+  openModal(dateLabel(date, { day: 'numeric', month: 'long', year: 'numeric' }), `<p class="modal-subtitle">${entries.length ? `${entries.length} ${plural(entries.length, 'тренировка', 'тренировки', 'тренировок')} в этот день` : 'В этот день записей нет'}</p>${entries.map(w => workoutRow(w, true)).join('')}${!entries.length ? `<div class="day-empty">${icon('wave')}<p>${date > today ? 'Здесь можно запланировать следующую тренировку.' : 'Возможно, здесь будет ещё один хороший день в воде.'}</p></div>` : ''}<div class="modal-actions"><button class="button primary" data-action="add-date" data-date="${date}">${icon('plus')}Добавить тренировку</button></div>`);
 }
 function confirmDelete(id) {
   const w = workouts.find(item => item.id === id);
@@ -438,7 +357,7 @@ function showSettings() {
 }
 function showImportPreview() {
   const stats = summary(pendingImport, today);
-  openModal('Восстановить дневник?', `<p class="modal-subtitle">Файл проверен. Посмотрите, что будет загружено.</p><div class="import-summary"><strong>${stats.total}</strong><span>${plural(stats.total, 'тренировка', 'тренировки', 'тренировок')}</span><strong>${number(stats.distance / 1000)} км</strong><span>известная дистанция</span></div><p class="import-warning">Импорт полностью заменит текущий дневник (${workouts.length} ${plural(workouts.length, 'запись', 'записи', 'записей')}). Сохраните его резервную копию перед заменой.</p><button class="text-link" data-action="export">${icon('download')}Скачать текущий дневник</button><div id="import-confirm-error" class="form-error" role="alert" hidden></div><div class="modal-actions"><button class="button secondary" data-action="settings">Отмена</button><button class="button primary" id="confirm-import">Заменить дневник</button></div>`);
+  openModal('Восстановить дневник?', `<p class="modal-subtitle">Файл проверен. Посмотрите, что будет загружено.</p><div class="import-summary"><strong>${pendingImport.length}</strong><span>записей · выполнено: ${stats.total}</span><strong>${number(stats.distance / 1000)} км</strong><span>известная дистанция</span></div><p class="import-warning">Импорт полностью заменит текущий дневник (${workouts.length} ${plural(workouts.length, 'запись', 'записи', 'записей')}). Сохраните его резервную копию перед заменой.</p><button class="text-link" data-action="export">${icon('download')}Скачать текущий дневник</button><div id="import-confirm-error" class="form-error" role="alert" hidden></div><div class="modal-actions"><button class="button secondary" data-action="settings">Отмена</button><button class="button primary" id="confirm-import">Заменить дневник</button></div>`);
   document.querySelector('#confirm-import').addEventListener('click', () => {
     try {
       writeWorkouts(localStorage, pendingImport);
@@ -460,7 +379,8 @@ function download(text, name) {
 function navigate() {
   const target = location.hash.slice(1);
   if (!['dashboard', 'diary', 'stats'].includes(target)) return;
-  view = target; closeModal(); render(); window.scrollTo({ top: 0, behavior: 'instant' });
+  if (!closeModal()) { history.replaceState(null, '', `#${view}`); return; }
+  view = target; render(); window.scrollTo({ top: 0, behavior: 'instant' });
 }
 window.addEventListener('hashchange', navigate);
 document.addEventListener('click', event => {
@@ -477,6 +397,7 @@ document.addEventListener('click', event => {
   }
   else if (action === 'close-modal') closeModal();
   else if (action === 'detail') showDetail(id);
+  else if (action === 'quick-results') showQuickResults(id, target.dataset.exerciseId);
   else if (action === 'edit') { const w = workouts.find(item => item.id === id); if (w) showForm(w); }
   else if (action === 'delete') confirmDelete(id);
   else if (action === 'day') showDay(target.dataset.date);
