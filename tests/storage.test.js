@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readWorkouts, writeWorkouts, STORAGE_KEY } from '../src/storage.js';
+import { backupJSON, summary } from '../src/domain.js';
 const makeStorage = () => {
   const data = new Map();
   return { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
@@ -76,4 +77,18 @@ test('invalid second record prevents any storage change or partial import', () =
   const before = storage.getItem(STORAGE_KEY);
   assert.throws(() => writeWorkouts(storage, [workout, { ...workout, id: 'bad', status: 'unknown' }]));
   assert.equal(storage.getItem(STORAGE_KEY), before);
+});
+
+test('legacy status stays intact in storage while both records contribute after reload', () => {
+  const storage = makeStorage();
+  const records = [workout, { ...workout, id: 'legacy-plan', status: 'PLANNED', distance: 500 }];
+  const raw = backupJSON(records);
+  storage.setItem(STORAGE_KEY, raw);
+  const loaded = readWorkouts(storage);
+  assert.equal(storage.getItem(STORAGE_KEY), raw);
+  assert.deepEqual(loaded, records);
+  assert.equal(summary(loaded, '2026-10-24').total, 2);
+  assert.equal(summary(loaded, '2026-10-24').distance, 500);
+  writeWorkouts(storage, loaded);
+  assert.deepEqual(readWorkouts(storage), records);
 });

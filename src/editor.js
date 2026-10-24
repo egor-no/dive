@@ -36,10 +36,10 @@ function blockHTML(b, index) {
     <details class="editor-options"><summary>Настройки блока</summary><div class="form-grid">${field('block-title', 'Название · необязательно', b.title || `Блок ${index + 1}`, 'maxlength="200"')}${timeField('block-after', 'Отдых после блока', b.restAfterCs)}</div><p class="exercise-hint">В конце круга отдых упражнения заменяется паузой между кругами, в конце блока — паузой после блока.</p></details>
     ${tools('block')}</div></details>`;
 }
-export function editorHTML(w) {
+export function editorHTML(w, { editing = false } = {}) {
   return `<form id="workout-form" novalidate><div class="form-grid">
     ${field('date', 'Дата', w.date, 'type="date" min="1900-01-01"')}${field('title', 'Название тренировки', w.title, 'maxlength="200"')}
-    </div><p class="editor-status">${w.status === 'COMPLETED' ? 'Выполнена' : 'В планах · результаты сохраняются как черновик'}</p>
+    </div>
     <div id="block-editors">${w.blocks.map(blockHTML).join('')}</div>
     <button type="button" class="button secondary add-element" id="add-block">+ Добавить блок</button>
     <div class="training-totals"><div id="manual-distance-field">${field('distance', 'Дистанция без блоков, м · необязательно', w.distance ?? '', 'type="number" min="1" max="100000" step="1"')}</div><p id="calculated-distance" class="calculated-total"></p></div>
@@ -50,7 +50,7 @@ export function editorHTML(w) {
     <label class="field comment-field"><span>Комментарий и самочувствие</span><textarea name="comment" rows="2" maxlength="2000">${esc(w.comment)}</textarea></label></details>
     <div id="form-error" class="form-error" role="alert" tabindex="-1" hidden></div>${discardHTML()}
     <div class="modal-actions editor-save-actions"><button type="button" class="button secondary" data-action="close-modal">Отмена</button>
-    ${w.status === 'COMPLETED' ? '<button type="submit" class="button primary" name="save-status" value="COMPLETED">Сохранить изменения</button><button type="submit" class="text-link" name="save-status" value="PLANNED">Вернуть в планы</button>' : '<button type="submit" class="button secondary" name="save-status" value="PLANNED">Сохранить план</button><button type="submit" class="button primary" name="save-status" value="COMPLETED">Отметить выполненной</button>'}
+    <button type="submit" class="button primary">${editing ? 'Сохранить изменения' : 'Сохранить'}</button>
     </div></form>`;
 }
 export function mountEditor(w, { today, onSave, onDiscard }) {
@@ -148,8 +148,7 @@ export function mountEditor(w, { today, onSave, onDiscard }) {
           ...resultEditors.get(e.dataset.id).read(), ...(legacy.has(e.dataset.id) ? { legacy: legacy.get(e.dataset.id) } : {}),
         })),
       }));
-      const status = event.submitter?.value || w.status;
-      const candidate = validateWorkout({ ...w, date: val(form, 'date'), title: val(form, 'title'), status,
+      const candidate = validateWorkout({ ...w, date: val(form, 'date'), title: val(form, 'title'),
         blocks: program, distance: blocks().length ? w.distance : num(form, 'distance'), durationCs: time(form, 'duration'), comment: val(form, 'comment') }, today());
       onSave(candidate);
     } catch (reason) { error.textContent = reason.message; error.hidden = false; error.focus(); }

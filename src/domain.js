@@ -140,8 +140,10 @@ export function validateExercise(input, rounds = 1) {
 }
 export function validateWorkout(input, today = dateKey()) {
   if (!input || !validId(input.id)) throw new Error('Некорректный идентификатор тренировки.');
-  if (!['PLANNED', 'COMPLETED'].includes(input.status)) throw new Error('Выберите статус тренировки.');
-  if (!validDate(input.date) || (input.status === 'COMPLETED' && input.date > today)) throw new Error('Укажите корректную дату. Выполненная тренировка не может быть в будущем.');
+  // Retain legacy metadata for JSON compatibility; it no longer affects behavior.
+  const status = input.status === undefined ? 'COMPLETED' : input.status;
+  if (!['PLANNED', 'COMPLETED'].includes(status)) throw new Error('Некорректное служебное поле записи.');
+  if (!validDate(input.date)) throw new Error('Укажите существующую дату.');
   if (!Array.isArray(input.blocks)) throw new Error('Нужен список блоков.');
   const ids = new Set([input.id]);
   const addId = id => {
@@ -170,7 +172,7 @@ export function validateWorkout(input, today = dateKey()) {
   const style = input.style ?? '';
   if (typeof style !== 'string' || (style !== '' && !Object.hasOwn(STYLES, style))) throw new Error('Неизвестный стиль исходной записи.');
   if (typeof input.createdAt !== 'string' || !Number.isFinite(Date.parse(input.createdAt))) throw new Error('Некорректное время создания записи.');
-  const workout = { id: input.id, date: input.date, title: textField(input.title, 200, 'Название тренировки'), status: input.status,
+  const workout = { id: input.id, date: input.date, title: textField(input.title, 200, 'Название тренировки'), status,
     blocks, distance: optionalNumber(input.distance ?? null, 100000, 'Общая дистанция'),
     durationCs: timeValue(input.durationCs, 'Общая продолжительность'), style,
     comment: textField(input.comment, 2000, 'Комментарий'), createdAt: input.createdAt };
@@ -218,7 +220,7 @@ export function migrateLegacyWorkout(input, today = dateKey()) {
 export function copyWorkout(source, { today = dateKey(), createId = () => crypto.randomUUID(), now = new Date().toISOString() } = {}) {
   return {
     id: createId(), date: today, title: source.title, comment: '', createdAt: now,
-    status: 'PLANNED', distance: source.blocks.length ? null : source.distance, durationCs: null, style: source.style,
+    status: 'COMPLETED', distance: source.blocks.length ? null : source.distance, durationCs: null, style: source.style,
     blocks: source.blocks.map(block => ({
       id: createId(), title: block.title, rounds: block.rounds, restBetweenCs: block.restBetweenCs, restAfterCs: block.restAfterCs,
       exercises: block.exercises.map(e => ({ id: createId(), distance: e.distance, style: e.style, technique: e.technique,
@@ -258,7 +260,7 @@ export const techniqueKey = value => value.trim().toLocaleLowerCase('ru-RU').rep
 export const recordKey = swim => `${swim.distance}:${swim.style}${techniqueKey(swim.technique || '') ? ':' + techniqueKey(swim.technique) : ''}`;
 const swimOrder = (a, b) => chronological(a, b) || a.blockIndex - b.blockIndex || (a.round ?? 0) - (b.round ?? 0) || a.exerciseIndex - b.exerciseIndex;
 export function timedResults(workouts) {
-  return workouts.filter(w => w.status === 'COMPLETED').flatMap(w => w.blocks.flatMap((block, blockIndex) =>
+  return workouts.flatMap(w => w.blocks.flatMap((block, blockIndex) =>
     block.exercises.flatMap((exercise, exerciseIndex) => exercise.results.map(result => ({
       distance: exercise.distance, style: exercise.style, technique: exercise.technique,
       timeCs: result.timeCs, round: result.round, resultId: result.id,
@@ -278,14 +280,14 @@ export function personalBests(workouts) {
   return [...records.values()].sort((a, b) => a.distance - b.distance || a.style.localeCompare(b.style));
 }
 export function regularity(workouts, today = dateKey()) {
-  const days = [...new Set(workouts.filter(w => w.status === 'COMPLETED' && w.date <= today).map(w => w.date))].sort();
+  const days = [...new Set(workouts.filter(w => w.date <= today).map(w => w.date))].sort();
   const lastDate = days.at(-1) ?? null;
   const average = days.length < 2 ? null : (dayNumber(lastDate) - dayNumber(days[0])) / (days.length - 1);
   const elapsed = lastDate ? dayNumber(today) - dayNumber(lastDate) : null;
   return { days: days.length, lastDate, average, elapsed, overdue: average !== null && elapsed > Math.max(average * 1.5, average + 1) };
 }
 export function summary(workouts, today = dateKey()) {
-  const actual = workouts.filter(w => w.status === 'COMPLETED' && w.date <= today);
+  const actual = workouts.filter(w => w.date <= today);
   const weekDay = new Date(`${today}T12:00:00Z`).getUTCDay();
   const monday = shiftDate(today, -((weekDay + 6) % 7));
   const month = actual.filter(w => w.date.slice(0, 7) === today.slice(0, 7));
@@ -302,7 +304,7 @@ export function summary(workouts, today = dateKey()) {
 export function monthlySeries(workouts, today = dateKey(), count = 6) {
   return Array.from({ length: count }, (_, index) => {
     const key = monthKey(index - count + 1, today);
-    const items = workouts.filter(w => w.status === 'COMPLETED' && w.date.startsWith(key) && w.date <= today);
+    const items = workouts.filter(w => w.date.startsWith(key) && w.date <= today);
     return { key, count: items.length, distance: items.reduce((sum, w) => sum + (totalDistance(w) ?? 0), 0) };
   });
 }
@@ -311,7 +313,7 @@ export function weeklySeries(workouts, today = dateKey(), count = 8) {
   const monday = shiftDate(today, -((weekDay + 6) % 7));
   return Array.from({ length: count }, (_, index) => {
     const key = shiftDate(monday, (index - count + 1) * 7);
-    return { key, count: workouts.filter(w => w.status === 'COMPLETED' && w.date >= key && w.date < shiftDate(key, 7) && w.date <= today).length };
+    return { key, count: workouts.filter(w => w.date >= key && w.date < shiftDate(key, 7) && w.date <= today).length };
   });
 }
 export function paceSeries(workouts, key) {

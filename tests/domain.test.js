@@ -136,38 +136,42 @@ test('comparison follows round sequence, while ties preserve earlier result', ()
   assert.equal(personalBests([w])[0].resultId, 'a1');
   assert.equal(previousResult([w], history[2]).resultId, 'b1');
 });
-test('planned trainings with draft results are excluded from every metric', () => {
+test('legacy PLANNED records contribute to every metric exactly like COMPLETED', () => {
   const w = { ...example(), status: 'PLANNED' };
-  assert.equal(summary([w], TODAY).total, 0);
-  assert.equal(summary([w], TODAY).distance, 0);
-  assert.equal(regularity([w], TODAY).days, 0);
-  assert.deepEqual(personalBests([w]), []);
-  assert.deepEqual(paceSeries([w], '50:freestyle'), []);
-  assert.ok(monthlySeries([w], TODAY).every(p => p.distance === 0 && p.count === 0));
-  assert.ok(weeklySeries([w], TODAY).every(p => p.count === 0));
+  assert.equal(summary([w], TODAY).total, 1);
+  assert.equal(summary([w], TODAY).distance, 1500);
+  assert.equal(regularity([w], TODAY).days, 1);
+  assert.equal(personalBests([w]).find(r => r.distance === 50).timeCs, 4789);
+  assert.equal(paceSeries([w], '50:freestyle').length, 2);
+  for (const calculate of [summary, regularity, personalBests, timedResults, monthlySeries, weeklySeries]) {
+    assert.deepEqual(calculate([w], TODAY), calculate([example()], TODAY));
+  }
 });
-test('status can switch both ways without losing results', () => {
+test('legacy status metadata has no effect on visits or records', () => {
   const w = { ...example(), status: 'PLANNED' };
   const before = structuredClone(w.blocks);
   w.status = 'COMPLETED';
   assert.equal(summary([w], TODAY).distance, 1500);
   assert.equal(personalBests([w]).length, 2);
   w.status = 'PLANNED';
-  assert.equal(summary([w], TODAY).total, 0);
-  assert.deepEqual(personalBests([w]), []);
+  assert.equal(summary([w], TODAY).total, 1);
+  assert.equal(personalBests([w]).length, 2);
   assert.deepEqual(w.blocks, before);
 });
-test('future plans accepted; future completed training rejected', () => {
-  assert.doesNotThrow(() => validateWorkout(training({ status: 'PLANNED', date: '2027-01-01' }), TODAY));
-  assert.throws(() => validateWorkout(training({ date: '2027-01-01' }), TODAY));
+test('existing future dates survive JSON round trips regardless of legacy status', () => {
+  for (const status of ['PLANNED', 'COMPLETED']) {
+    const w = training({ status, date: '2027-01-01' });
+    assert.deepEqual(parseBackup(backupJSON([w]), TODAY), [w]);
+  }
 });
-test('regularity requires two unique completed dates and retains reminder threshold', () => {
+test('regularity uses unique dates of both legacy statuses and retains reminder threshold', () => {
   assert.equal(regularity([], TODAY).average, null);
   assert.equal(regularity([training(), training({ id: 'two' })], TODAY).average, null);
   const entries = [training(), training({ id: 'duplicate' }), training({ id: 'two', date: '2026-10-05' }), training({ id: 'plan', status: 'PLANNED', date: '2026-10-03' })];
-  assert.equal(regularity(entries, '2026-10-11').average, 4);
-  assert.equal(regularity(entries, '2026-10-11').overdue, false);
-  assert.equal(regularity(entries, '2026-10-12').overdue, true);
+  assert.equal(regularity(entries, '2026-10-08').average, 2);
+  assert.equal(regularity(entries, '2026-10-08').days, 3);
+  assert.equal(regularity(entries, '2026-10-08').overdue, false);
+  assert.equal(regularity(entries, '2026-10-09').overdue, true);
   assert.equal(regularity([training({ date: '2026-03-28' }), training({ date: '2026-03-30' })], TODAY).average, 2);
 });
 test('summary counts known distances and Monday-based weeks', () => {
@@ -244,7 +248,7 @@ test('copy preserves ordered program and plans, with new ids and no actual data'
   source.blocks[0].restBetweenCs = 3000; source.blocks[0].restAfterCs = 5000;
   source.blocks[0].exercises[0].plannedTimeCs = 12000; source.blocks[0].exercises[0].restAfterCs = 2000;
   const copy = copyWorkout(source, copyOptions());
-  assert.equal(copy.status, 'PLANNED'); assert.equal(copy.date, TODAY); assert.equal(copy.durationCs, null); assert.equal(copy.comment, '');
+  assert.equal(copy.status, 'COMPLETED'); assert.equal(copy.date, TODAY); assert.equal(copy.durationCs, null); assert.equal(copy.comment, '');
   assert.equal(totalDistance(copy), 1500); assert.equal(copy.title, source.title);
   const ids = [copy.id];
   copy.blocks.forEach((b,i) => {
@@ -258,7 +262,40 @@ test('copy preserves ordered program and plans, with new ids and no actual data'
   });
   assert.equal(new Set(ids).size, ids.length); assert.doesNotThrow(() => validateWorkout(copy, TODAY));
   assert.deepEqual(personalBests([source, copy]), personalBests([source]));
-  assert.equal(summary([source, copy], TODAY).distance, 1500);
+  assert.equal(summary([source, copy], TODAY).distance, 3000);
+  assert.equal(summary([source, copy], TODAY).total, 2);
+});
+
+test('trainings without measured times count as visits and contribute full known distance', () => {
+  const entries = [
+    training({ id: 'old-plan', status: 'PLANNED', date: '2026-10-19', blocks: [block({ rounds: 3 })] }),
+    training({ id: 'ordinary', date: TODAY, distance: 700 }),
+    training({ id: 'unknown', status: 'PLANNED', date: TODAY }),
+  ];
+  const stats = summary(entries, TODAY);
+  assert.equal(stats.total, 3); assert.equal(stats.weekCount, 3); assert.equal(stats.monthCount, 3);
+  assert.equal(stats.distance, 1000); assert.equal(stats.monthDistance, 1000);
+  assert.equal(stats.days, 2); assert.equal(stats.average, 2); assert.equal(stats.unknownDistance, 1);
+  assert.deepEqual(personalBests(entries), []);
+});
+
+test('mixed legacy statuses and missing status import without losing results or fields', () => {
+  const entries = [
+    { ...example(), id: 'old-plan', status: 'PLANNED' },
+    { ...example(), id: 'old-completed' },
+    { ...example(), id: 'no-status' },
+  ];
+  delete entries[2].status;
+  const raw = backupJSON(entries);
+  const imported = parseBackup(raw, TODAY);
+  assert.equal(imported[0].status, 'PLANNED');
+  assert.equal(imported[1].status, 'COMPLETED');
+  assert.equal(imported[2].status, 'COMPLETED');
+  entries.forEach((entry, i) => assert.deepEqual(imported[i].blocks, entry.blocks));
+  assert.equal(summary(imported, TODAY).total, 3);
+  assert.equal(summary(imported, TODAY).distance, 4500);
+  assert.equal(timedResults(imported).length, 9);
+  assert.deepEqual(parseBackup(backupJSON(imported), TODAY), imported);
 });
 test('copy is deeply independent and unsaved copy changes no collection', () => {
   const source = example(); const before = structuredClone(source); const collection = [source];

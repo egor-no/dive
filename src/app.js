@@ -50,7 +50,7 @@ let view = ['dashboard', 'diary', 'stats'].includes(location.hash.slice(1)) ? lo
 let calendarMonth = today.slice(0, 7);
 let demo = false;
 let realWorkouts = [];
-let filterType = 'all';
+
 let filterMonth = '';
 let filterSearch = '';
 let chartPeriod = 'month';
@@ -143,16 +143,16 @@ function calendar() {
   const days = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
   const counts = new Map();
   workouts.filter(w => w.date.startsWith(calendarMonth)).forEach(w => counts.set(w.date, (counts.get(w.date) || 0) + 1));
-  const completedDates = new Set(workouts.filter(w => w.status === 'COMPLETED' && w.date.startsWith(calendarMonth)).map(w => w.date));
-  const plannedDates = new Set(workouts.filter(w => w.status === 'PLANNED' && w.date.startsWith(calendarMonth)).map(w => w.date));
+
+
   return `<div class="calendar-toolbar"><h3>${monthLabel(calendarMonth)}</h3><div><button class="calendar-today" data-action="calendar-today">Сегодня</button><button class="icon-button" data-action="prev-month" aria-label="Предыдущий месяц">${icon('left')}</button><button class="icon-button" data-action="next-month" aria-label="Следующий месяц">${icon('right')}</button></div></div>
     <div class="calendar-grid"><div class="week-label">Пн</div><div class="week-label">Вт</div><div class="week-label">Ср</div><div class="week-label">Чт</div><div class="week-label">Пт</div><div class="week-label weekend">Сб</div><div class="week-label weekend">Вс</div>
     ${Array.from({ length: leading }, () => '<span class="calendar-spacer"></span>').join('')}
     ${Array.from({ length: days }, (_, i) => {
       const key = `${calendarMonth}-${String(i + 1).padStart(2, '0')}`;
       const count = counts.get(key) || 0;
-      return `<button class="day ${completedDates.has(key) ? 'has-workout' : ''} ${plannedDates.has(key) ? 'has-planned' : ''} ${key === today ? 'today' : ''} ${key > today ? 'future' : ''}" data-action="day" data-date="${key}" ${key === today ? 'aria-current="date"' : ''} aria-label="${dateLabel(key, { day: 'numeric', month: 'long', year: 'numeric' })}, ${count} ${plural(count, 'тренировка', 'тренировки', 'тренировок')}${plannedDates.has(key) ? ', есть план' : ''}"><span>${i + 1}</span>${count ? `<span class="day-dots">${Array.from({ length: Math.min(count, 3) }, () => '<i></i>').join('')}</span>` : ''}</button>`;
-    }).join('')}</div><div class="calendar-footer"><span>${completedDates.size} ${plural(completedDates.size, 'день', 'дня', 'дней')} в воде в этом месяце</span><span>Пунктир — запланировано</span></div>`;
+      return `<button class="day ${count ? 'has-workout' : ''} ${key === today ? 'today' : ''} ${key > today ? 'future' : ''}" data-action="day" data-date="${key}" ${key === today ? 'aria-current="date"' : ''} aria-label="${dateLabel(key, { day: 'numeric', month: 'long', year: 'numeric' })}, ${count} ${plural(count, 'тренировка', 'тренировки', 'тренировок')}"><span>${i + 1}</span>${count ? `<span class="day-dots">${Array.from({ length: Math.min(count, 3) }, () => '<i></i>').join('')}</span>` : ''}</button>`;
+    }).join('')}</div><div class="calendar-footer"><span>${counts.size} ${plural(counts.size, 'день', 'дня', 'дней')} в воде в этом месяце</span><span>Ваше время для себя</span></div>`;
 }
 function workoutRow(w, compact = false) {
   const isTimed = exercisesOf(w).some(exercise => exercise.results.length);
@@ -160,21 +160,21 @@ function workoutRow(w, compact = false) {
   const duration = totalDuration(w);
   const row = `<button class="workout-row ${compact ? 'compact' : ''}" data-action="detail" data-id="${esc(w.id)}">
     <span class="workout-symbol ${isTimed ? 'timed' : ''}">${icon(isTimed ? 'clock' : 'wave')}</span>
-    <span class="workout-description"><span class="workout-title">${esc(w.title || (w.style ? STYLES[w.style] : 'Тренировка'))}${best ? `<span class="record-marker" aria-label="Личный рекорд">${icon('trophy')}</span>` : ''}</span><span class="workout-subtitle">${w.status === 'PLANNED' ? '◌ Запланирована' : '✓ Выполнена'} · ${dateLabel(w.date)} · ${exercisesOf(w).length} ${plural(exercisesOf(w).length, 'задание', 'задания', 'заданий')}</span>${!compact && w.comment ? `<span class="workout-comment">${esc(w.comment)}</span>` : ''}</span>
+    <span class="workout-description"><span class="workout-title">${esc(w.title || (w.style ? STYLES[w.style] : 'Тренировка'))}${best ? `<span class="record-marker" aria-label="Личный рекорд">${icon('trophy')}</span>` : ''}</span><span class="workout-subtitle">${dateLabel(w.date)} · ${exercisesOf(w).length} ${plural(exercisesOf(w).length, 'задание', 'задания', 'заданий')}</span>${!compact && w.comment ? `<span class="workout-comment">${esc(w.comment)}</span>` : ''}</span>
     <span class="workout-numbers"><strong>${distanceLabel(totalDistance(w))}</strong><span>${duration !== null ? `${formatCentiseconds(w.durationCs)} мин:сек` : 'В своём ритме'}</span></span>${icon('right', 'row-arrow')}</button>`;
   return compact ? row : `<div class="diary-entry">${row}${exercisesOf(w).length ? `<details class="exercise-disclosure"><summary>Задания (${exercisesOf(w).length})</summary>${exerciseList(w)}</details>` : ''}</div>`;
 }
 function diary() {
   const months = [...new Set(workouts.map(w => w.date.slice(0, 7)))].sort().reverse();
   const items = sortedWorkouts(workouts.filter(w =>
-    (filterType === 'all' || w.status === filterType) &&
+
     (!filterMonth || w.date.startsWith(filterMonth)) &&
     (!filterSearch || `${w.title} ${w.comment} ${STYLES[w.style] || ''} ${totalDistance(w) || ''} ${exercisesOf(w).map(e => `${e.description} ${e.technique} ${STYLES[e.style]} ${e.distance}`).join(' ')}`.toLocaleLowerCase('ru').includes(filterSearch.toLocaleLowerCase('ru')))));
   const groups = new Map();
   items.forEach(w => { const key = w.date.slice(0, 7); if (!groups.has(key)) groups.set(key, []); groups.get(key).push(w); });
-  return `<div class="diary-toolbar"><div class="segmented" aria-label="Тип тренировки">${[['all', 'Все тренировки'], ['COMPLETED', 'Выполнены'], ['PLANNED', 'В планах']].map(([key, label]) => `<button data-action="filter-type" data-value="${key}" aria-pressed="${filterType === key}" class="${filterType === key ? 'selected' : ''}">${label}</button>`).join('')}</div><div class="diary-inputs"><label class="search-box">${icon('search')}<input id="diary-search" type="search" placeholder="Найти в дневнике" aria-label="Поиск по комментариям, стилю и дистанции" maxlength="200" value="${esc(filterSearch)}"></label><select id="diary-month" aria-label="Месяц тренировок"><option value="">Все месяцы</option>${months.map(key => `<option value="${key}" ${filterMonth === key ? 'selected' : ''}>${monthLabel(key)}</option>`).join('')}</select></div></div>
+  return `<div class="diary-toolbar"><div class="diary-inputs"><label class="search-box">${icon('search')}<input id="diary-search" type="search" placeholder="Найти в дневнике" aria-label="Поиск по комментариям, стилю и дистанции" maxlength="200" value="${esc(filterSearch)}"></label><select id="diary-month" aria-label="Месяц тренировок"><option value="">Все месяцы</option>${months.map(key => `<option value="${key}" ${filterMonth === key ? 'selected' : ''}>${monthLabel(key)}</option>`).join('')}</select></div></div>
     <div class="diary-count">${items.length} ${plural(items.length, 'запись', 'записи', 'записей')} <span>Всё начинается с одного заплыва</span></div>
-    ${items.length ? [...groups].map(([key, entries]) => `<section class="diary-group"><div class="section-intro"><h2>${monthLabel(key)}</h2><span class="muted">${number(entries.filter(w => w.status === 'COMPLETED').reduce((sum, w) => sum + (totalDistance(w) || 0), 0))} м</span></div><div class="panel diary-list">${entries.map(w => workoutRow(w)).join('')}</div></section>`).join('') : `<section class="panel">${emptyState(workouts.length ? 'Таких записей пока нет' : 'Ваша история начинается здесь', workouts.length ? 'Попробуйте другой месяц, тип тренировки или поисковый запрос.' : 'Добавляйте тренировки с результатами или просто отмечайте дни, проведённые в бассейне.', workouts.length ? 'reset-filters' : 'add', workouts.length ? 'Сбросить фильтры' : 'Добавить тренировку', 'book')}</section>`}`;
+    ${items.length ? [...groups].map(([key, entries]) => `<section class="diary-group"><div class="section-intro"><h2>${monthLabel(key)}</h2><span class="muted">${number(entries.reduce((sum, w) => sum + (totalDistance(w) || 0), 0))} м</span></div><div class="panel diary-list">${entries.map(w => workoutRow(w)).join('')}</div></section>`).join('') : `<section class="panel">${emptyState(workouts.length ? 'Таких записей пока нет' : 'Ваша история начинается здесь', workouts.length ? 'Попробуйте другой месяц или поисковый запрос.' : 'Добавляйте тренировки с результатами или просто отмечайте дни, проведённые в бассейне.', workouts.length ? 'reset-filters' : 'add', workouts.length ? 'Сбросить фильтры' : 'Добавить тренировку', 'book')}</section>`}`;
 }
 function barChart(series, metric, label, unit, weekly = false) {
   const max = Math.max(...series.map(item => item[metric]), 1);
@@ -251,11 +251,11 @@ function showTemplatePicker() {
 }
 function showForm(existing = null, initialDate = today, seed = null) {
   const w = structuredClone(existing || {
-    id: crypto.randomUUID(), date: initialDate, title: '', status: 'PLANNED', blocks: [],
+    id: crypto.randomUUID(), date: initialDate, title: '', status: 'COMPLETED', blocks: [],
     distance: null, durationCs: null, style: '', comment: '', createdAt: new Date().toISOString(), ...seed,
   });
   const baseline = existing ? JSON.stringify(existing) : null;
-  openModal(existing ? 'Редактировать тренировку' : 'Новая тренировка', editorHTML(w), true);
+  openModal(existing ? 'Редактировать тренировку' : 'Новая тренировка', editorHTML(w, { editing: Boolean(existing) }), true);
   activeEditor = mountEditor(w, {
     today: () => today,
     onDiscard: () => closeModal(true),
@@ -272,7 +272,7 @@ function exerciseList(w, comparisons = false) {
   return w.blocks.map(b => `<section class="program-block compact-program"><h3>${esc(b.title)} · ${b.rounds} ${plural(b.rounds, 'круг', 'круга', 'кругов')} · ${blockDistance(b)} м</h3><div class="diary-exercises">${b.exercises.map(e => {
     const overview = resultOverview(resultDraft(e), b.rounds);
     const best = records.some(r => r.id === w.id && r.exerciseId === e.id);
-    const timeLabel = overview.best === null ? 'Добавить время' : overview.best < 6000 ? `${(overview.best / 100).toFixed(2)} с` : formatCentiseconds(overview.best);
+    const timeLabel = overview.best === null ? '' : overview.best < 6000 ? `${(overview.best / 100).toFixed(2)} с` : formatCentiseconds(overview.best);
     const countLabel = b.rounds === 1 ? '' : e.resultMode === 'best' ? (overview.count ? 'Круг неизвестен' : '') : `${overview.count} из ${b.rounds} результатов`;
     const history = comparisons ? e.results.map(r => {
       const swim = swims.find(s => s.resultId === r.id);
@@ -280,7 +280,7 @@ function exerciseList(w, comparisons = false) {
       const delta = previous ? r.timeCs - previous.timeCs : null;
       return `<li>${r.round === null ? 'Круг неизвестен' : `Круг ${r.round}`} · ${formatCentiseconds(r.timeCs)}${previous ? `<p>${delta < 0 ? 'Быстрее' : delta > 0 ? 'Дольше' : 'Без изменения'}${delta ? ' на ' + formatCentiseconds(Math.abs(delta)) : ''}. Предыдущий: ${formatCentiseconds(previous.timeCs)}.</p>` : ''}</li>`;
     }).join('') : '';
-    return `<div class="diary-exercise"><button class="exercise-quick-button" data-action="quick-results" data-id="${esc(w.id)}" data-exercise-id="${esc(e.id)}" aria-label="Времена: ${e.distance} м ${STYLES[e.style]}${e.technique ? ' ' + esc(e.technique) : ''}, ${esc(timeLabel)}"><span class="exercise-quick-info"><strong>${e.distance} м · ${STYLES[e.style]}${e.technique ? ' · ' + esc(e.technique) : ''}</strong>${e.description ? `<span class="exercise-description-caption">${esc(e.description)}</span>` : ''}${countLabel ? `<small>${esc(countLabel)}</small>` : ''}</span><span class="exercise-quick-time" ${overview.best === null ? '' : 'title="Лучшее время в этом упражнении"'}>${best ? `<span class="record-marker" aria-label="Личный рекорд">${icon('trophy')}</span>` : ''}<span>${esc(timeLabel)}</span>${icon('clock')}</span></button>
+    return `<div class="diary-exercise"><button class="exercise-quick-button" data-action="quick-results" data-id="${esc(w.id)}" data-exercise-id="${esc(e.id)}" aria-label="Времена: ${e.distance} м ${STYLES[e.style]}${e.technique ? ' ' + esc(e.technique) : ''}${timeLabel ? ', ' + esc(timeLabel) : ''}"><span class="exercise-quick-info"><strong>${e.distance} м · ${STYLES[e.style]}${e.technique ? ' · ' + esc(e.technique) : ''}</strong>${e.description ? `<span class="exercise-description-caption">${esc(e.description)}</span>` : ''}${countLabel ? `<small>${esc(countLabel)}</small>` : ''}</span><span class="exercise-quick-time" ${overview.best === null ? '' : 'title="Лучшее время в этом упражнении"'}>${best ? `<span class="record-marker" aria-label="Личный рекорд">${icon('trophy')}</span>` : ''}${timeLabel ? `<span>${esc(timeLabel)}</span>` : ''}${icon('clock')}</span></button>
       ${comparisons && (history || e.plannedTimeCs || e.restAfterCs || e.legacy?.durationCs) ? `<details class="exercise-extra"><summary>Подробности</summary>${e.plannedTimeCs ? `<p>План: ${formatCentiseconds(e.plannedTimeCs)}</p>` : ''}${e.restAfterCs ? `<p>Отдых после упражнения: ${formatCentiseconds(e.restAfterCs)} (кроме последнего в круге)</p>` : ''}${e.legacy?.durationCs ? `<p>Старая продолжительность: ${formatCentiseconds(e.legacy.durationCs)}</p>` : ''}${history ? `<ul class="exercise-list">${history}</ul>` : ''}</details>` : ''}</div>`;
   }).join('')}</div>${comparisons && (b.restBetweenCs || b.restAfterCs) ? `<details class="exercise-extra"><summary>Отдых в блоке</summary>${b.rounds > 1 && b.restBetweenCs ? `<p>Между кругами: ${formatCentiseconds(b.restBetweenCs)}</p>` : ''}${b.restAfterCs ? `<p>После блока: ${formatCentiseconds(b.restAfterCs)}</p>` : ''}</details>` : ''}</section>`).join('');
 }
@@ -290,7 +290,7 @@ function showQuickResults(id, exerciseId) {
   const exercise = block?.exercises.find(e => e.id === exerciseId);
   if (!exercise) return toast('Упражнение уже удалено.');
   const baseline = JSON.stringify(w);
-  openModal(`${exercise.distance} м · ${STYLES[exercise.style]}`, `<p class="modal-subtitle">${esc(block.title)} · ${block.rounds} ${plural(block.rounds, 'круг', 'круга', 'кругов')}${exercise.technique ? ' · ' + esc(exercise.technique) : ''}${w.status === 'PLANNED' ? ' · черновик' : ''}</p>
+  openModal(`${exercise.distance} м · ${STYLES[exercise.style]}`, `<p class="modal-subtitle">${esc(block.title)} · ${block.rounds} ${plural(block.rounds, 'круг', 'круга', 'кругов')}${exercise.technique ? ' · ' + esc(exercise.technique) : ''}</p>
     <form id="quick-results-form" novalidate>${resultsEditorHTML(exercise, block.rounds, true)}<div id="quick-error" class="form-error" role="alert" tabindex="-1" hidden></div>${discardHTML()}<div class="modal-actions"><button type="button" class="button secondary" data-action="close-modal">Отмена</button><button type="submit" class="button primary">Сохранить</button></div></form>`);
   const form = document.querySelector('#quick-results-form');
   const editor = mountResultsEditor(form.querySelector('.inline-results'), exercise, block.rounds);
@@ -305,7 +305,7 @@ function showQuickResults(id, exerciseId) {
       app.querySelectorAll('.exercise-quick-button').forEach(button => {
         if (button.dataset.id === id && button.dataset.exerciseId === exerciseId) { const disclosure = button.closest('details'); if (disclosure) disclosure.open = true; }
       });
-      toast(w.status === 'PLANNED' ? 'Черновые результаты сохранены' : 'Результаты сохранены');
+      toast('Результаты сохранены');
     } catch (reason) { const error = form.querySelector('#quick-error'); error.textContent = reason.message; error.hidden = false; error.focus(); }
   });
 }
@@ -314,7 +314,7 @@ function showDetail(id) {
   if (!w) return toast('Запись уже удалена.');
   const duration = totalDuration(w);
   openModal(esc(w.title || 'Тренировка'), `
-    <p class="modal-subtitle">${w.status === 'PLANNED' ? 'Запланирована' : 'Выполнена'} · ${dateLabel(w.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · ${exercisesOf(w).length} ${plural(exercisesOf(w).length, 'задание', 'задания', 'заданий')}</p>
+    <p class="modal-subtitle">${dateLabel(w.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · ${exercisesOf(w).length} ${plural(exercisesOf(w).length, 'задание', 'задания', 'заданий')}</p>
     <div class="detail-grid"><div><span>Общая дистанция</span><strong>${distanceLabel(totalDistance(w))}</strong></div><div><span>Общая продолжительность</span><strong>${formatCentiseconds(w.durationCs)} <small>${duration === null ? '' : 'мин:сек'}</small></strong></div>${w.style ? `<div><span>Стиль исходной записи</span><strong>${STYLES[w.style]}</strong></div>` : ''}</div>
     ${exercisesOf(w).length ? exerciseList(w, true) : '<p class="records-empty">Тренировка без отдельных заданий.</p>'}
     <div class="detail-comment"><span class="eyebrow">ОБЩИЙ КОММЕНТАРИЙ И САМОЧУВСТВИЕ</span><p>${w.comment ? esc(w.comment) : 'Комментария нет.'}</p></div>
@@ -324,7 +324,7 @@ function showDetail(id) {
 
 function showDay(date) {
   const entries = sortedWorkouts(workouts.filter(w => w.date === date));
-  openModal(dateLabel(date, { day: 'numeric', month: 'long', year: 'numeric' }), `<p class="modal-subtitle">${entries.length ? `${entries.length} ${plural(entries.length, 'тренировка', 'тренировки', 'тренировок')} в этот день` : 'В этот день записей нет'}</p>${entries.map(w => workoutRow(w, true)).join('')}${!entries.length ? `<div class="day-empty">${icon('wave')}<p>${date > today ? 'Здесь можно запланировать следующую тренировку.' : 'Возможно, здесь будет ещё один хороший день в воде.'}</p></div>` : ''}<div class="modal-actions"><button class="button primary" data-action="add-date" data-date="${date}">${icon('plus')}Добавить тренировку</button></div>`);
+  openModal(dateLabel(date, { day: 'numeric', month: 'long', year: 'numeric' }), `<p class="modal-subtitle">${entries.length ? `${entries.length} ${plural(entries.length, 'тренировка', 'тренировки', 'тренировок')} в этот день` : 'В этот день записей нет'}</p>${entries.map(w => workoutRow(w, true)).join('')}${!entries.length ? `<div class="day-empty">${icon('wave')}<p>${date > today ? 'В этот день пока нет тренировок.' : 'Возможно, здесь будет ещё один хороший день в воде.'}</p></div>` : ''}<div class="modal-actions"><button class="button primary" data-action="add-date" data-date="${date}">${icon('plus')}Добавить тренировку</button></div>`);
 }
 function confirmDelete(id) {
   const w = workouts.find(item => item.id === id);
@@ -357,14 +357,14 @@ function showSettings() {
 }
 function showImportPreview() {
   const stats = summary(pendingImport, today);
-  openModal('Восстановить дневник?', `<p class="modal-subtitle">Файл проверен. Посмотрите, что будет загружено.</p><div class="import-summary"><strong>${pendingImport.length}</strong><span>записей · выполнено: ${stats.total}</span><strong>${number(stats.distance / 1000)} км</strong><span>известная дистанция</span></div><p class="import-warning">Импорт полностью заменит текущий дневник (${workouts.length} ${plural(workouts.length, 'запись', 'записи', 'записей')}). Сохраните его резервную копию перед заменой.</p><button class="text-link" data-action="export">${icon('download')}Скачать текущий дневник</button><div id="import-confirm-error" class="form-error" role="alert" hidden></div><div class="modal-actions"><button class="button secondary" data-action="settings">Отмена</button><button class="button primary" id="confirm-import">Заменить дневник</button></div>`);
+  openModal('Восстановить дневник?', `<p class="modal-subtitle">Файл проверен. Посмотрите, что будет загружено.</p><div class="import-summary"><strong>${pendingImport.length}</strong><span>записей</span><strong>${number(stats.distance / 1000)} км</strong><span>известная дистанция</span></div><p class="import-warning">Импорт полностью заменит текущий дневник (${workouts.length} ${plural(workouts.length, 'запись', 'записи', 'записей')}). Сохраните его резервную копию перед заменой.</p><button class="text-link" data-action="export">${icon('download')}Скачать текущий дневник</button><div id="import-confirm-error" class="form-error" role="alert" hidden></div><div class="modal-actions"><button class="button secondary" data-action="settings">Отмена</button><button class="button primary" id="confirm-import">Заменить дневник</button></div>`);
   document.querySelector('#confirm-import').addEventListener('click', () => {
     try {
       writeWorkouts(localStorage, pendingImport);
       workouts = pendingImport;
       pendingImport = null;
       storageError = '';
-      filterMonth = ''; filterType = 'all'; filterSearch = '';
+      filterMonth = ''; filterSearch = '';
       closeModal(); render(); toast('Дневник восстановлен из резервной копии');
     } catch (error) { const element = document.querySelector('#import-confirm-error'); element.textContent = error.message; element.hidden = false; }
   });
@@ -403,8 +403,8 @@ document.addEventListener('click', event => {
   else if (action === 'day') showDay(target.dataset.date);
   else if (action === 'prev-month' || action === 'next-month') { calendarMonth = monthKey(action === 'prev-month' ? -1 : 1, `${calendarMonth}-01`); render(); }
   else if (action === 'calendar-today') { calendarMonth = today.slice(0, 7); render(); }
-  else if (action === 'filter-type') { filterType = target.dataset.value; render(); }
-  else if (action === 'reset-filters') { filterType = 'all'; filterMonth = ''; filterSearch = ''; render(); }
+
+  else if (action === 'reset-filters') { filterMonth = ''; filterSearch = ''; render(); }
   else if (action === 'chart-period') { chartPeriod = target.dataset.value; render(); }
   else if (action === 'settings') showSettings();
   else if (action === 'export') { download(backupJSON(workouts), `nyrok-${demo ? 'example-' : ''}${today}.json`); toast('Резервная копия подготовлена'); }

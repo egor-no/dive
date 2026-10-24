@@ -80,7 +80,7 @@ test('clearing a result removes it and recalculates records after save', () => {
   assert.equal(personalBests([updated])[0].timeCs, 4852);
   assert.equal(personalBests([source])[0].timeCs, 4789);
 });
-test('quick-edit saved plan retains draft results on reload without affecting statistics', () => {
+test('quick edit of legacy PLANNED record persists full results and immediately updates statistics', () => {
   const source = workout({ status: 'PLANNED' });
   const draft = resultDraft(exercise()); draft.entries[0].value = '46.82';
   const updated = withExerciseResults(source, 'exercise', draft);
@@ -89,9 +89,9 @@ test('quick-edit saved plan retains draft results on reload without affecting st
   writeWorkouts(storage, [updated]);
   const reopened = readWorkouts(storage);
   assert.deepEqual(reopened, [updated]);
-  assert.equal(summary(reopened, TODAY).total, 0);
-  assert.deepEqual(personalBests(reopened), []);
-  reopened[0].status = 'COMPLETED';
+  assert.equal(reopened[0].status, 'PLANNED');
+  assert.equal(summary(reopened, TODAY).total, 1);
+  assert.equal(summary(reopened, TODAY).distance, 600);
   assert.equal(personalBests(reopened)[0].timeCs, 4682);
 });
 test('round reduction preserves hidden rest; changing rounds only changes planned distance', () => {
@@ -102,18 +102,20 @@ test('round reduction preserves hidden rest; changing rounds only changes planne
   assert.equal(totalDistance(updated), 150);
   assert.equal(personalBests([updated])[0].timeCs, 4852);
 });
-test('constructor provides default block titles, inline results and explicit status actions', () => {
+test('constructor uses ordinary save actions independent of legacy status', () => {
   const b = newBlock(3);
   assert.equal(b.title, 'Блок 3');
   const html = editorHTML(workout({ status: 'PLANNED' }));
   assert.ok(!html.includes('select name="status"'));
   assert.ok(!html.includes('id="result-editors"'));
   assert.ok(!html.includes('name="result-round"'));
-  assert.ok(html.includes('Сохранить план'));
-  assert.ok(html.includes('Отметить выполненной'));
+  assert.match(html, />Сохранить<\/button>/);
   assert.equal((html.match(/class="inline-results"/g) || []).length, 2);
-  const completed = editorHTML(workout());
-  assert.ok(completed.indexOf('value="COMPLETED"') < completed.indexOf('value="PLANNED"'));
+  for (const status of ['PLANNED', 'COMPLETED']) {
+    const editing = editorHTML(workout({ status }), { editing: true });
+    assert.match(editing, />Сохранить изменения<\/button>/);
+    assert.doesNotMatch(editing, /save-status|value="(?:PLANNED|COMPLETED)"|черновик|Запланирована|Выполнена|Сохранить план|Отметить выполненной|Вернуть в планы/i);
+  }
 });
 
 test('one-round editor opens directly, hides mode choice and preserves either saved mode', () => {
