@@ -79,10 +79,20 @@ function emptyState(title, text, action = 'add', label = 'Добавить тр�
   return `<div class="empty-state"><span class="empty-symbol">${icon(symbol)}</span><h3>${title}</h3><p>${text}</p>${action ? `<button class="button secondary small" data-action="${action}">${icon(action === 'add' ? 'plus' : 'arrow')}${label}</button>` : ''}</div>`;
 }
 function regularityText(stats) {
-  if (!stats.lastDate) return { title: 'У каждого ритма есть начало', text: 'Запишите первое посещение — и здесь появится ваша история плавания.', tag: 'Первый шаг' };
-  if (stats.average === null) return { title: 'Начало положено', text: 'После второго дня в бассейне мы рассчитаем ваш привычный интервал.', tag: 'В своём темпе' };
-  if (stats.overdue) return { title: 'Кажется, пора поплавать!', text: `Ваш привычный интервал — ${number(stats.average)} дн. Возможно, самое время запланировать встречу с водой.`, tag: 'Вода подождёт вас' };
-  return { title: stats.elapsed === 0 ? 'Сегодня вы уже были в воде' : 'Вы находите свой ритм', text: `В среднем вы возвращаетесь в бассейн каждые ${number(stats.average)} дн. Продолжайте так, как комфортно вам.`, tag: 'Без спешки и давления' };
+  // summary uses unique local calendar dates and excludes future visits.
+  if (stats.lastDate === today) return {
+    title: 'Сегодня вы уже были в воде',
+    text: stats.average === null
+      ? 'Начало положено. После второго дня в бассейне мы рассчитаем ваш привычный интервал.'
+      : `В среднем вы возвращаетесь в бассейн каждые ${number(stats.average)} дн. Продолжайте так, как комфортно вам.`,
+    tag: 'Без спешки и давления', image: 'rhythm-today.png', warm: false,
+  };
+  if (stats.average === null || stats.elapsed === null || stats.elapsed < Math.ceil(stats.average)) return null;
+  return {
+    title: 'Кажется, пора поплавать!',
+    text: `Ваш привычный интервал — ${number(stats.average)} дн. Возможно, самое время запланировать встречу с водой.`,
+    tag: 'Вода подождёт вас', image: 'rhythm-due.png', warm: true,
+  };
 }
 function statCard(label, value, unit, caption, symbol, accent = false) {
   return `<article class="stat-card ${accent ? 'accent' : ''}"><div class="stat-label">${label}${icon(symbol)}</div><div class="stat-value">${value}<span>${unit}</span></div><p>${caption}</p></article>`;
@@ -92,49 +102,53 @@ function render() {
   const titles = { dashboard: ['МОЁ ПРОСТРАНСТВО', 'Хороший день для воды'], diary: ['МОЯ ИСТОРИЯ', 'Дневник тренировок'], stats: ['МОЙ ПРОГРЕСС', 'Каждый заплыв имеет значение'] };
   app.innerHTML = `
     <a class="skip-link" href="#main">К содержимому</a>
-    <aside class="sidebar">
-      <a class="brand" href="#dashboard" aria-label="Нырок — на главную"><span class="brand-symbol">${icon('wave')}</span><span>нырок<span class="brand-dot">.</span><small>дневник плавания</small></span></a>
+    <aside class="sidebar${view === 'dashboard' ? ' sidebar-overview' : ''}">
+      <a class="brand" href="#dashboard" aria-label="Нырок — на главную"><img class="brand-symbol" src="/src/nyrok-logo.svg" width="42" height="42" alt=""><span>нырок<span class="brand-dot">.</span><small>дневник плавания</small></span></a>
       <div class="sidebar-label">ВАШ ДНЕВНИК</div>
       <nav aria-label="Основная навигация">${nav.map(([key, symbol, label]) => `<a href="#${key}" class="nav-item ${view === key ? 'active' : ''}" ${view === key ? 'aria-current="page"' : ''}>${icon(symbol)}<span>${label}</span>${view === key ? '<span class="nav-dot"></span>' : ''}</a>`).join('')}</nav>
+      ${view === 'dashboard' ? `<button class="button primary sidebar-add" data-action="add">${icon('plus')}<span>Добавить тренировку</span></button>` : ''}
       <div class="sidebar-note"><div class="small-waves">${icon('wave')}</div><p>Не быстрее других.<br>Ближе к себе.</p><span>Плывите в своём ритме</span></div>
       <div class="sidebar-bottom"><button class="nav-item" data-action="settings">${icon('settings')}<span>Данные и настройки</span></button><div class="local-label"><span class="status-dot"></span>Хранится на этом устройстве</div></div>
     </aside>
-    <main id="main" tabindex="-1">
+    <main id="main" class="${view === 'dashboard' ? 'journal-page' : ''}" tabindex="-1">
       ${demo ? `<div class="demo-banner"><span>Вы смотрите пример. Эти записи не сохраняются в вашем дневнике.</span><button data-action="demo-off">Вернуться к моим данным ${icon('close')}</button></div>` : ''}
       ${storageError ? `<div class="error-banner" role="alert">${esc(storageError)} <button data-action="settings">Открыть данные</button></div>` : ''}
-      <header class="page-header"><div><p class="eyebrow">${titles[view][0]}</p><h1>${titles[view][1]}<span class="title-dot">.</span></h1><p class="header-date">${view === 'dashboard' ? `Привет! Сегодня ${dateLabel(today, { weekday: 'long', day: 'numeric', month: 'long' })}.` : view === 'diary' ? 'Место для больших дистанций и маленьких побед.' : 'Замечайте изменения, наслаждайтесь процессом.'}</p></div><button class="button primary" data-action="add">${icon('plus')}<span>Добавить тренировку</span></button></header>
+      ${view === 'dashboard' ? journalHeader() : `<header class="page-header"><div><p class="eyebrow">${titles[view][0]}</p><h1>${titles[view][1]}<span class="title-dot">.</span></h1><p class="header-date">${view === 'diary' ? 'Место для больших дистанций и маленьких побед.' : 'Замечайте изменения, наслаждайтесь процессом.'}</p></div><button class="button primary" data-action="add">${icon('plus')}<span>Добавить тренировку</span></button></header>`}
       ${view === 'dashboard' ? dashboard(stats) : view === 'diary' ? diary() : statistics(stats)}
       <footer class="page-footer"><span>НЫРОК <span class="footer-dot">•</span> В своём ритме</span><span>${icon('shield')} Только вы и ваша история</span></footer>
     </main>
     <nav class="mobile-nav" aria-label="Мобильная навигация">${nav.map(([key, symbol, label]) => `<a href="#${key}" class="${view === key ? 'active' : ''}" ${view === key ? 'aria-current="page"' : ''}>${icon(symbol)}${label}</a>`).join('')}<button data-action="settings">${icon('settings')}Данные</button></nav>`;
 }
-function poolArt() {
-  return `<svg class="pool-art" viewBox="0 0 440 230" aria-hidden="true">
-    <defs><clipPath id="pool-clip"><rect x="35" y="20" width="365" height="195" rx="95"/></clipPath></defs>
-    <rect x="25" y="10" width="385" height="215" rx="105" fill="#d5e2e5" stroke="#f8f7f4" stroke-width="2"/>
-    <g clip-path="url(#pool-clip)"><rect x="35" y="20" width="365" height="195" fill="#aec7ce"/>
-    <g stroke="#eef4f4" stroke-width="2" opacity=".7"><path d="M45 62h350M35 115h365M45 168h350"/></g>
-    <g stroke="#698d9b" stroke-width="4" stroke-dasharray="4 7" opacity=".7"><path d="M35 87h365M35 142h365"/></g>
-    <g fill="none" stroke="#d9e8e9" stroke-width="1.5"><path d="M88 37q20-9 40 0t40 0M257 191q20-9 40 0t40 0M62 189q20-9 40 0M325 40q20-9 40 0M280 103q20-9 40 0"/></g>
-    <g transform="translate(228 112) rotate(-9)"><ellipse cx="-18" cy="1" rx="32" ry="13" fill="none" stroke="#e7f1f1"/><path d="m-16-3-29-7m29 14-28 11" stroke="#f4f1e9" stroke-width="6" stroke-linecap="round"/><path d="m-12-2 22-7 17-14M-8 4 13 13l19-1" stroke="#f4f1e9" stroke-width="6" fill="none" stroke-linecap="round"/><ellipse cx="-7" cy="0" rx="15" ry="7" fill="#667f91"/><circle cx="15" cy="0" r="8" fill="#D66A65"/></g></g>
-    <path d="M352 185v32m14-38v32m-14-17h14m-14 10h14" stroke="#f8f7f4" stroke-width="3" fill="none" stroke-linecap="round"/>
-  </svg>`;
+function journalHeader() {
+  return `<header class="journal-header">
+    <div class="journal-hero">
+      <div class="journal-hero-copy"><p class="journal-label">Моё пространство</p><h1>Хороший день<br>для <em>воды.</em></h1><p class="journal-greeting">Привет! Сегодня ${dateLabel(today, { weekday: 'long', day: 'numeric', month: 'long' })}.</p></div>
+      <figure class="journal-poster" aria-hidden="true">
+        <img src="/src/hero-swim.png" width="523" height="291" alt="">
+      </figure>
+      <div class="journal-header-actions"><button class="button primary" data-action="add">${icon('plus')}<span>Добавить тренировку</span></button><p aria-hidden="true">ВДОХ.<br>ВЫДОХ.<br>ПЛЫВЁМ.</p></div>
+    </div>
+  </header>`;
 }
 function dashboard(stats) {
   const rhythm = regularityText(stats);
-  return `<section class="hero"><div class="hero-copy"><span class="pill">${icon('wave')} ВАШ ЛИЧНЫЙ РИТМ</span><h2>Больше воды.<br><span>Меньше суеты.</span></h2><p>Здесь важен каждый заплыв.<br>И то, как вы себя после него чувствуете.</p></div>${poolArt()}<span class="hero-caption">ВДОХ. ВЫДОХ. ПЛЫВЁМ.</span></section>
-    <div class="section-intro"><h2>Этот месяц <span>/ ${dateLabel(`${today.slice(0, 7)}-01`, { month: 'long' })}</span></h2><a href="#stats" class="text-link">Вся статистика ${icon('arrow')}</a></div>
-    <section class="stats-grid" aria-label="Краткая статистика">
-      ${statCard('Тренировки', number(stats.monthCount), plural(stats.monthCount, 'тренировка', 'тренировки', 'тренировок'), 'Каждое посещение в счёт', 'wave')}
-      ${statCard('Дистанция', number(stats.monthDistance / 1000), 'км', 'Все известные метры за месяц', 'drop')}
-      ${statCard('Последний раз', stats.lastDate ? dateLabel(stats.lastDate, { day: 'numeric', month: 'short' }).replace('.', '') : '—', '', stats.lastDate ? stats.elapsed === 0 ? 'Сегодня. Время выдохнуть' : `${stats.elapsed} ${plural(stats.elapsed, 'день', 'дня', 'дней')} назад` : 'Ваша история ещё впереди', 'calendar')}
-      ${statCard('Ваш интервал', stats.average === null ? '—' : number(stats.average), stats.average === null ? '' : 'дн.', stats.average === null ? 'Нужно два разных дня в воде' : 'В среднем между посещениями', 'rhythm')}
+  return `<section class="journal-month" aria-labelledby="month-heading">
+      <div class="journal-section-heading"><h2 id="month-heading">Этот месяц <span>/ ${dateLabel(`${today.slice(0, 7)}-01`, { month: 'long' })}</span></h2><a href="#stats" class="text-link">Вся статистика ${icon('arrow')}</a></div>
+      <div class="journal-metrics">
+        <div class="journal-distance"><span class="journal-label">Дистанция за месяц</span><div><strong>${number(stats.monthDistance / 1000)}</strong><span>км</span></div><p>Каждый метр имеет значение</p></div>
+        <dl class="journal-facts">
+          <div><dt>${icon('wave')}<span>Тренировок за месяц</span></dt><dd>${number(stats.monthCount)}</dd></div>
+          <div><dt>${icon('clock')}<span>Последний раз</span></dt><dd>${stats.lastDate ? dateLabel(stats.lastDate, { day: 'numeric', month: 'short' }).replace('.', '') : '—'}</dd></div>
+          <div><dt>${icon('rhythm')}<span>Средний интервал</span></dt><dd>${stats.average === null ? '—' : `${number(stats.average)} <small>дн.</small>`}</dd></div>
+        </dl>
+        <div class="journal-distance-art" aria-hidden="true"><img src="/src/month-water.png" width="430" height="290" alt=""></div>
+      </div>
     </section>
-    <section class="dashboard-bottom">
-      <article class="panel calendar-panel"><div class="panel-heading"><div><p class="eyebrow">ШАГ ЗА ШАГОМ</p><h2>Дни в воде</h2></div><span class="legend"><i></i> Тренировка</span></div>${calendar()}</article>
-      <div class="dashboard-right"><article class="rhythm-card"><span class="rhythm-icon">${icon('rhythm')}</span><div><p class="eyebrow">${rhythm.tag}</p><h3>${rhythm.title}</h3><p>${rhythm.text}</p></div></article>
-      <article class="panel recent-panel"><div class="panel-heading"><h2>Последние тренировки</h2><a class="icon-button" href="#diary" aria-label="Открыть дневник">${icon('arrow')}</a></div>${workouts.length ? `<div class="recent-list">${sortedWorkouts(workouts).slice(0, 3).map(w => workoutRow(w, true)).join('')}</div>` : emptyState('Первый заплыв — начало истории', 'Необязательно помнить метры и минуты. Достаточно просто отметить, что вы плавали.', 'add', 'Записать первый заплыв')}</article></div>
+    <section class="journal-lower${rhythm ? '' : ' without-rhythm'}" aria-label="Календарь и регулярность">
+      <article class="journal-calendar"><div class="journal-section-heading"><h2>Дни в воде</h2><span class="legend"><i></i> Тренировка</span></div>${calendar()}</article>
+      ${rhythm ? `<article class="journal-rhythm${rhythm.warm ? ' journal-rhythm--warm' : ''}"><div class="journal-rhythm-copy"><div class="journal-rhythm-heading"><span class="journal-label">Регулярность</span>${icon('wave')}</div><p class="journal-rhythm-tag">${rhythm.tag}</p><h2>${rhythm.title}</h2><p class="journal-rhythm-text">${rhythm.text}</p></div><img class="journal-rhythm-art" src="/src/${rhythm.image}" width="1806" height="871" alt="" aria-hidden="true"></article>` : ''}
     </section>
+    <section class="journal-recent" aria-labelledby="recent-heading"><div class="journal-section-heading"><h2 id="recent-heading">Последние тренировки</h2><a class="text-link" href="#diary">Весь дневник ${icon('arrow')}</a></div>${workouts.length ? `<div class="recent-list">${sortedWorkouts(workouts).slice(0, 3).map(w => workoutRow(w, true)).join('')}</div>` : emptyState('Здесь начинается ваша история', 'Запишите посещение бассейна — даже если не считали метры и минуты.', 'add', 'Записать первый заплыв')}</section>
     ${!workouts.length && !demo ? `<div class="demo-invite"><span>Хотите посмотреть, как оживает дневник?</span><button class="text-link" data-action="demo-on">Открыть пример ${icon('arrow')}</button></div>` : ''}`;
 }
 function calendar() {
