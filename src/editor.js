@@ -14,6 +14,20 @@ const num = (card, name) => {
 };
 const newExercise = () => ({ id: id(), distance: null, style: 'freestyle', technique: '', description: '', plannedTimeCs: null, restAfterCs: null, resultMode: 'rounds', results: [] });
 export const newBlock = (number = 1) => ({ id: id(), title: `Блок ${number}`, rounds: 1, restBetweenCs: null, restAfterCs: null, exercises: [newExercise()] });
+const hasValue = value => value !== null && value !== undefined && String(value).trim() !== '';
+// Inspect raw input, including invalid times, before any validation or removal.
+export function exerciseNeedsDeleteConfirmation(fields, draft, persisted = false) {
+  return persisted || Boolean(fields.badInput) ||
+    [fields.distance, fields.technique, fields.description, fields.plannedTimeCs, fields.restAfterCs, fields.legacy?.durationCs].some(hasValue) ||
+    (hasValue(fields.style) && fields.style !== 'freestyle') ||
+    draft.mode !== 'rounds' || draft.entries.some(entry => hasValue(entry.value));
+}
+export function blockNeedsDeleteConfirmation(fields, automaticTitle, hasFilledExercise, persisted = false) {
+  return persisted || hasFilledExercise || Boolean(fields.badInput) ||
+    (hasValue(fields.title) && fields.title.trim() !== automaticTitle) ||
+    (hasValue(fields.rounds) && Number(fields.rounds) !== 1) ||
+    [fields.restBetweenCs, fields.restAfterCs].some(hasValue);
+}
 const circleLabel = n => `${n} ${n % 10 === 1 && n % 100 !== 11 ? 'круг' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'круга' : 'кругов'}`;
 const tools = type => `<div class="compact-tools"><button type="button" class="icon-button" data-edit="${type}-up" aria-label="${type === 'block' ? 'Блок' : 'Упражнение'} выше">↑</button><button type="button" class="icon-button" data-edit="${type}-down" aria-label="${type === 'block' ? 'Блок' : 'Упражнение'} ниже">↓</button><button type="button" class="icon-button" data-edit="${type}-remove" aria-label="Удалить ${type === 'block' ? 'блок' : 'упражнение'}">×</button></div>`;
 function exerciseHTML(e, rounds) {
@@ -28,7 +42,7 @@ function exerciseHTML(e, rounds) {
     ${resultsEditorHTML(e, rounds)}${tools('exercise')}</div></details>`;
 }
 function blockHTML(b, index) {
-  return `<details class="block-editor compact-block" data-id="${esc(b.id)}" data-rounds="${b.rounds}" open><summary class="block-caption"></summary><div class="editor-body">
+  return `<details class="block-editor compact-block" data-id="${esc(b.id)}" data-rounds="${b.rounds}" data-default-title="Блок ${index + 1}" open><summary class="block-caption"></summary><div class="editor-body">
     <div class="block-main-fields">${field('block-rounds', 'Круги', b.rounds, 'type="number" min="1" step="1" inputmode="numeric"')}
     <div class="between-rest" ${b.rounds > 1 ? '' : 'hidden'}>${timeField('block-between', 'Отдых между кругами', b.restBetweenCs)}</div></div>
     <div class="block-exercises">${b.exercises.map(e => exerciseHTML(e, b.rounds)).join('')}</div>
@@ -53,13 +67,22 @@ export function editorHTML(w, { editing = false } = {}) {
     <button type="submit" class="button primary">${editing ? 'Сохранить изменения' : 'Сохранить'}</button>
     </div></form>`;
 }
-export function mountEditor(w, { today, onSave, onDiscard }) {
+export function mountEditor(w, { today, onSave, onDiscard, persisted = false }) {
   const form = document.querySelector('#workout-form');
   const list = form.querySelector('#block-editors');
   const resultEditors = new Map();
   const legacy = new Map(w.blocks.flatMap(b => b.exercises.filter(e => e.legacy).map(e => [e.id, e.legacy])));
+  const savedBlocks = new Set(persisted ? w.blocks.map(b => b.id) : []);
+  const savedExercises = new Set(persisted ? w.blocks.flatMap(b => b.exercises.map(e => e.id)) : []);
   const blocks = () => [...list.children];
   const exercises = b => [...b.querySelector('.block-exercises').children];
+  const exerciseHasContent = card => exerciseNeedsDeleteConfirmation({
+    distance: val(card, 'exercise-distance'), style: val(card, 'exercise-style'),
+    technique: val(card, 'exercise-technique'), description: val(card, 'exercise-description'),
+    plannedTimeCs: val(card, 'exercise-planned'), restAfterCs: val(card, 'exercise-rest'),
+    badInput: card.querySelector('[name="exercise-distance"]').validity.badInput,
+    legacy: legacy.get(card.dataset.id),
+  }, resultEditors.get(card.dataset.id).getDraft(), savedExercises.has(card.dataset.id));
   const caption = e => `${val(e, 'exercise-distance') || '—'} м · ${STYLES[val(e, 'exercise-style')]}${val(e, 'exercise-technique') ? ' · ' + val(e, 'exercise-technique') : ''}`;
   const update = () => {
     let distance = 0;
@@ -121,7 +144,12 @@ export function mountEditor(w, { today, onSave, onDiscard }) {
       const card = action.startsWith('block-') ? b : button.closest('.exercise-editor');
       const parent = card.parentElement;
       if (action.endsWith('-remove')) {
-        if (!window.confirm('Удалить элемент программы вместе с его результатами?')) return;
+        const needsConfirmation = card === b ? blockNeedsDeleteConfirmation({
+          title: val(b, 'block-title'), rounds: val(b, 'block-rounds'),
+          restBetweenCs: val(b, 'block-between'), restAfterCs: val(b, 'block-after'),
+          badInput: b.querySelector('[name="block-rounds"]').validity.badInput,
+        }, b.dataset.defaultTitle, exercises(b).some(exerciseHasContent), savedBlocks.has(b.dataset.id)) : exerciseHasContent(card);
+        if (needsConfirmation && !window.confirm('Удалить элемент программы вместе с его результатами?')) return;
         for (const e of card === b ? exercises(b) : [card]) resultEditors.delete(e.dataset.id);
         card.remove();
       } else if (action.endsWith('-up') && card.previousElementSibling) parent.insertBefore(card, card.previousElementSibling);

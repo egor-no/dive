@@ -102,15 +102,15 @@ function render() {
   const titles = { dashboard: ['МОЁ ПРОСТРАНСТВО', 'Хороший день для воды'], diary: ['МОЯ ИСТОРИЯ', 'Дневник тренировок'], stats: ['МОЙ ПРОГРЕСС', 'Каждый заплыв имеет значение'] };
   app.innerHTML = `
     <a class="skip-link" href="#main">К содержимому</a>
-    <aside class="sidebar${view === 'dashboard' ? ' sidebar-overview' : ''}">
+    <aside class="sidebar">
       <a class="brand" href="#dashboard" aria-label="Нырок — на главную"><img class="brand-symbol" src="/src/nyrok-logo.svg" width="42" height="42" alt=""><span>нырок<span class="brand-dot">.</span><small>дневник плавания</small></span></a>
       <div class="sidebar-label">ВАШ ДНЕВНИК</div>
       <nav aria-label="Основная навигация">${nav.map(([key, symbol, label]) => `<a href="#${key}" class="nav-item ${view === key ? 'active' : ''}" ${view === key ? 'aria-current="page"' : ''}>${icon(symbol)}<span>${label}</span>${view === key ? '<span class="nav-dot"></span>' : ''}</a>`).join('')}</nav>
-      ${view === 'dashboard' ? `<button class="button primary sidebar-add" data-action="add">${icon('plus')}<span>Добавить тренировку</span></button>` : ''}
+      <button class="button primary sidebar-add" data-action="add">${icon('plus')}<span>Добавить тренировку</span></button>
       <div class="sidebar-note"><div class="small-waves">${icon('wave')}</div><p>Не быстрее других.<br>Ближе к себе.</p><span>Плывите в своём ритме</span></div>
       <div class="sidebar-bottom"><button class="nav-item" data-action="settings">${icon('settings')}<span>Данные и настройки</span></button><div class="local-label"><span class="status-dot"></span>Хранится на этом устройстве</div></div>
     </aside>
-    <main id="main" class="${view === 'dashboard' ? 'journal-page' : ''}" tabindex="-1">
+    <main id="main" class="${view === 'dashboard' ? 'journal-page' : view === 'diary' ? 'diary-page' : 'stats-page'}" tabindex="-1">
       ${demo ? `<div class="demo-banner"><span>Вы смотрите пример. Эти записи не сохраняются в вашем дневнике.</span><button data-action="demo-off">Вернуться к моим данным ${icon('close')}</button></div>` : ''}
       ${storageError ? `<div class="error-banner" role="alert">${esc(storageError)} <button data-action="settings">Открыть данные</button></div>` : ''}
       ${view === 'dashboard' ? journalHeader() : `<header class="page-header"><div><p class="eyebrow">${titles[view][0]}</p><h1>${titles[view][1]}<span class="title-dot">.</span></h1><p class="header-date">${view === 'diary' ? 'Место для больших дистанций и маленьких побед.' : 'Замечайте изменения, наслаждайтесь процессом.'}</p></div><button class="button primary" data-action="add">${icon('plus')}<span>Добавить тренировку</span></button></header>`}
@@ -172,10 +172,11 @@ function workoutRow(w, compact = false) {
   const isTimed = exercisesOf(w).some(exercise => exercise.results.length);
   const best = isTimed && personalBests(workouts).some(item => item.id === w.id);
   const duration = totalDuration(w);
+  const distance = totalDistance(w);
   const row = `<button class="workout-row ${compact ? 'compact' : ''}" data-action="detail" data-id="${esc(w.id)}">
-    <span class="workout-symbol ${isTimed ? 'timed' : ''}">${icon(isTimed ? 'clock' : 'wave')}</span>
-    <span class="workout-description"><span class="workout-title">${esc(w.title || (w.style ? STYLES[w.style] : 'Тренировка'))}${best ? `<span class="record-marker" aria-label="Личный рекорд">${icon('trophy')}</span>` : ''}</span><span class="workout-subtitle">${dateLabel(w.date)} · ${exercisesOf(w).length} ${plural(exercisesOf(w).length, 'задание', 'задания', 'заданий')}</span>${!compact && w.comment ? `<span class="workout-comment">${esc(w.comment)}</span>` : ''}</span>
-    <span class="workout-numbers"><strong>${distanceLabel(totalDistance(w))}</strong><span>${duration !== null ? `${formatCentiseconds(w.durationCs)} мин:сек` : 'В своём ритме'}</span></span>${icon('right', 'row-arrow')}</button>`;
+    ${compact ? `<span class="workout-symbol ${isTimed ? 'timed' : ''}">${icon(isTimed ? 'clock' : 'wave')}</span>` : `<time class="entry-date" datetime="${esc(w.date)}" aria-label="${dateLabel(w.date, { day: 'numeric', month: 'long', year: 'numeric' })}"><span class="entry-day">${w.date.slice(8)}</span><span class="entry-date-caption"><span>${dateLabel(w.date, { month: 'short' }).replace('.', '')}</span><span>${dateLabel(w.date, { weekday: 'short' })}</span></span></time>`}
+    <span class="workout-description"><span class="workout-title">${esc(w.title || (w.style ? STYLES[w.style] : 'Тренировка'))}${best ? `<span class="record-marker" aria-label="Личный рекорд">${icon('trophy')}</span>` : ''}</span><span class="workout-subtitle">${compact ? `${dateLabel(w.date)} · ` : ''}${exercisesOf(w).length} ${plural(exercisesOf(w).length, 'задание', 'задания', 'заданий')}</span>${!compact && w.comment ? `<span class="workout-comment">${esc(w.comment)}</span>` : ''}</span>
+    <span class="workout-numbers${!compact && distance === null ? ' unknown-distance' : ''}"><strong>${!compact && distance !== null ? `${number(distance)} <small>м</small>` : distanceLabel(distance)}</strong><span>${duration !== null ? `${formatCentiseconds(w.durationCs)} мин:сек` : 'В своём ритме'}</span></span>${icon('right', 'row-arrow')}</button>`;
   return compact ? row : `<div class="diary-entry">${row}${exercisesOf(w).length ? `<details class="exercise-disclosure"><summary>Задания (${exercisesOf(w).length})</summary>${exerciseList(w)}</details>` : ''}</div>`;
 }
 function diary() {
@@ -198,11 +199,13 @@ function statistics(stats) {
   const records = personalBests(workouts);
   if (!records.some(w => recordKey(w) === selectedPace)) selectedPace = records[0] ? recordKey(records[0]) : '';
   const months = monthlySeries(workouts, today);
-  return `<section class="stats-grid full-stats">
-    ${statCard('Всего тренировок', number(stats.total), '', `${stats.days} ${plural(stats.days, 'день', 'дня', 'дней')} посещения бассейна`, 'wave')}
-    ${statCard('Вся дистанция', number(stats.distance / 1000), 'км', stats.unknownDistance ? `${stats.unknownDistance} ${plural(stats.unknownDistance, 'запись', 'записи', 'записей')} без дистанции` : 'Каждый известный метр', 'drop')}
-    ${statCard('Неделя / месяц', `${stats.weekCount}<span class="stat-divider">/</span>${stats.monthCount}`, '', 'Неделя начинается в понедельник', 'calendar')}
-    ${statCard('Средний интервал', stats.average === null ? '—' : number(stats.average), stats.average === null ? '' : 'дн.', 'По уникальным дням за всё время', 'rhythm')}
+  return `<section class="stats-overview" aria-label="Общие показатели">
+    <article class="stats-distance"><h2>Вся дистанция</h2><div class="stats-distance-value">${number(stats.distance / 1000)}<span>км</span></div><p>${stats.unknownDistance ? `${stats.unknownDistance} ${plural(stats.unknownDistance, 'запись', 'записи', 'записей')} без дистанции` : 'Каждый известный метр'}</p></article>
+    <div class="stats-facts">
+      ${statCard('Всего тренировок', number(stats.total), '', `${stats.days} ${plural(stats.days, 'день', 'дня', 'дней')} посещения бассейна`, 'wave')}
+      ${statCard('Неделя / месяц', `${stats.weekCount}<span class="stat-divider">/</span>${stats.monthCount}`, '', 'Неделя начинается в понедельник', 'calendar')}
+      ${statCard('Средний интервал', stats.average === null ? '—' : number(stats.average), stats.average === null ? '' : 'дн.', 'По уникальным дням за всё время', 'rhythm')}
+    </div>
     </section>
     <section class="charts-grid"><article class="panel chart-panel"><div class="panel-heading"><div><p class="eyebrow">РЕГУЛЯРНОСТЬ</p><h2>Встречи с водой</h2></div><div class="segmented small">${[['week', 'Недели'], ['month', 'Месяцы']].map(([key, label]) => `<button data-action="chart-period" data-value="${key}" class="${chartPeriod === key ? 'selected' : ''}" aria-pressed="${chartPeriod === key}">${label}</button>`).join('')}</div></div><p class="chart-description">Количество тренировок · ${chartPeriod === 'week' ? '8 последних недель' : '6 последних месяцев'}</p>${barChart(chartPeriod === 'week' ? weeklySeries(workouts, today) : months, 'count', 'Количество тренировок', 'тренировок', chartPeriod === 'week')}</article>
     <article class="panel chart-panel"><div class="panel-heading"><div><p class="eyebrow">ДИСТАНЦИЯ</p><h2>Метр за метром</h2></div><span class="chart-unit">метры</span></div><p class="chart-description">Известная дистанция · 6 последних месяцев</p>${barChart(months, 'distance', 'Дистанция по месяцам', 'м')}</article></section>
@@ -272,6 +275,7 @@ function showForm(existing = null, initialDate = today, seed = null) {
   openModal(existing ? 'Редактировать тренировку' : 'Новая тренировка', editorHTML(w, { editing: Boolean(existing) }), true);
   activeEditor = mountEditor(w, {
     today: () => today,
+    persisted: Boolean(existing),
     onDiscard: () => closeModal(true),
     onSave: candidate => {
       if (existing && JSON.stringify(workouts.find(item => item.id === existing.id)) !== baseline) throw new Error('Эта запись изменилась в другой вкладке. Закройте окно и откройте запись заново.');

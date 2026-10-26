@@ -245,17 +245,239 @@ button:focus-visible,a:focus-visible,summary:focus-visible { outline-color:var(-
   .journal-recent .workout-numbers strong { font-size:15px; }
 }
 
-/* Desktop overview only; mobile keeps the original header button and artwork sizing. */
+/* Shared desktop add action; overview artwork keeps its own sizing. */
 @media(min-width:761px) {
-  .sidebar-overview .brand { transform:translateX(-6px); }
-  .sidebar-overview .sidebar-add { display:flex; width:100%; min-width:0; margin-top:14px; padding:12px 8px; gap:6px; font-size:11px; line-height:1.4; white-space:normal; background:#B84D3B; color:#FFF9EB; box-shadow:none; }
-  .sidebar-overview .sidebar-add:hover { background:#9E3F30; }
+  .sidebar .brand { transform:translateX(-6px); }
+  .sidebar .sidebar-add { display:flex; width:100%; min-width:0; margin-top:14px; padding:12px 8px; gap:6px; font-size:11px; line-height:1.4; white-space:normal; background:#B84D3B; color:#FFF9EB; box-shadow:none; }
+  .sidebar .sidebar-add:hover { background:#9E3F30; }
   .sidebar-add>.icon { width:16px; height:16px; }
   .sidebar-add>span { min-width:0; }
   .journal-header-actions>.button { display:none; }
+  .page-header>.button[data-action="add"] { display:none; }
   .journal-rhythm-art { inset:0; height:100%; object-fit:cover; object-position:center; }
 }
 @media(min-width:761px) and (max-width:980px) {
   .journal-header-actions { display:none; }
   .journal-poster { grid-row:1; }
+}
+
+/* Diary journal. Compact rows on the overview and calendar keep their own styling. */
+.diary-page .page-header { align-items:flex-start; margin-bottom:26px; }
+.diary-page .page-header h1 { font-size:clamp(28px,3vw,38px); line-height:1.15; }
+.diary-page .page-header .eyebrow { font-size:9px; letter-spacing:2px; }
+.diary-page .page-header .primary { background:#B84D3B; color:#FFF9EB; }
+.diary-page .page-header .primary:hover { background:#9E3F30; }
+.diary-page .diary-toolbar { margin:0; padding:17px 0; border-top:1px solid var(--ink); border-bottom:1px solid var(--line); }
+.diary-page .diary-inputs { width:100%; max-width:600px; gap:18px; align-items:center; }
+.diary-page .search-box { flex:1; min-width:0; padding:10px 0; border:0; border-bottom:1px solid var(--slate); border-radius:0; background:transparent; }
+.diary-page .search-box input { width:100%; min-width:0; font-size:12px; }
+.diary-page .search-box input::placeholder { color:var(--slate); }
+.diary-page .search-box>.icon { color:var(--slate); }
+.diary-page .diary-inputs select { min-height:42px; border:0; border-bottom:1px solid var(--slate); border-radius:0; background:transparent; color:var(--ink); font-size:12px; }
+.diary-page .diary-count { margin:19px 0 28px; color:var(--ink); font-size:11px; gap:15px; line-height:1.6; }
+.diary-page .diary-count>span { color:var(--slate); }
+.diary-page .diary-group { margin-bottom:32px; }
+.diary-page .diary-group>.section-intro { margin:0; padding:14px 0; border-top:1px solid var(--ink); border-bottom:1px solid var(--line); }
+.diary-page .diary-group>.section-intro h2 { font-family:var(--display); font-size:23px; font-weight:700; letter-spacing:-.5px; }
+.diary-page .diary-group>.section-intro>.muted { font-size:13px; font-variant-numeric:tabular-nums; color:var(--slate); }
+.diary-page .panel { border:0; border-radius:0; box-shadow:none; background:transparent; }
+.diary-page .diary-list { padding:0; overflow:visible; }
+.diary-page .diary-entry { border-bottom:1px solid var(--line); }
+.diary-page .workout-row { display:grid; grid-template-columns:118px minmax(0,1fr) minmax(100px,24%) 16px; align-items:center; gap:22px; padding:23px 0; border:0; border-radius:0; }
+.diary-page .workout-row:hover { background:#DEE5E340; }
+.diary-page .entry-date { display:flex; align-items:center; gap:10px; min-width:0; }
+.diary-page .entry-day { font-size:46px; line-height:1; font-weight:750; letter-spacing:-2px; font-variant-numeric:tabular-nums; }
+.diary-page .entry-date-caption { display:flex; flex-direction:column; gap:5px; font-size:11px; line-height:1.3; color:var(--slate); }
+.diary-page .entry-date-caption>span:last-child { font-size:10px; text-transform:uppercase; letter-spacing:1px; }
+.diary-page .workout-description { gap:7px; }
+.diary-page .workout-title { font-size:16px; line-height:1.4; font-weight:600; flex-wrap:wrap; overflow-wrap:anywhere; }
+.diary-page .workout-subtitle { font-size:11px; line-height:1.5; color:var(--slate); }
+.diary-page .workout-comment { font-size:11px; color:var(--muted); max-width:100%; line-height:1.5; }
+.diary-page .workout-numbers { min-width:0; gap:6px; }
+.diary-page .workout-numbers strong { font-size:32px; font-weight:700; line-height:1.15; letter-spacing:-1px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.diary-page .workout-numbers strong small { font-size:13px; font-weight:400; color:var(--slate); letter-spacing:0; }
+.diary-page .workout-numbers>span { font-size:10px; line-height:1.5; color:var(--slate); overflow-wrap:anywhere; }
+.diary-page .unknown-distance strong { font-size:13px; font-weight:400; letter-spacing:0; color:var(--slate); }
+.diary-page .row-arrow { margin:0; color:var(--slate); width:16px; }
+.diary-page .record-marker { color:var(--coral); }
+.diary-page .exercise-disclosure { padding:0 0 21px 140px; }
+.diary-page .exercise-disclosure>summary { font-size:11px; color:var(--slate); min-height:36px; padding:7px 0; }
+.diary-page .exercise-disclosure[open]>summary { color:var(--ink); }
+.diary-page .empty-state { padding:30px 0; }
+.diary-page .empty-state h3 { font-family:var(--display); font-size:24px; }
+.diary-page .empty-state p { color:var(--slate); }
+.diary-page .empty-symbol { border-radius:3px; background:var(--blue-light); }
+
+/* Only the read-only workout dialog contains a direct .detail-grid child.
+   The training constructor and quick time form are intentionally excluded. */
+.modal:has(>.detail-grid) { width:min(640px,calc(100% - 32px)); padding:27px 30px; border-radius:5px; background:var(--paper); }
+.modal:has(>.detail-grid) .modal-heading { padding-bottom:13px; border-bottom:1px solid var(--ink); align-items:flex-start; }
+.modal:has(>.detail-grid) .modal-heading h2 { font-family:var(--display); font-size:27px; line-height:1.2; min-width:0; overflow-wrap:anywhere; }
+.modal:has(>.detail-grid) .modal-heading>.icon-button { width:40px; height:40px; background:transparent; }
+.modal:has(>.detail-grid) .modal-subtitle { margin:13px 0 0; font-size:11px; color:var(--slate); }
+.modal:has(>.detail-grid) .detail-grid { padding:19px 0; margin:0 0 20px; gap:20px; border-bottom:1px solid var(--line); }
+.modal:has(>.detail-grid) .detail-grid>div { min-width:0; gap:8px; }
+.modal:has(>.detail-grid) .detail-grid span { font-size:10px; color:var(--slate); }
+.modal:has(>.detail-grid) .detail-grid strong { font-size:25px; font-weight:650; line-height:1.25; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.modal:has(>.detail-grid) .detail-grid>div:first-child strong { font-size:32px; font-weight:700; }
+.modal:has(>.detail-grid) .detail-grid strong small { color:var(--slate); }
+.modal:has(>.detail-grid) .detail-comment { margin:20px 0 18px; padding:17px 0 0; border-top:1px solid var(--line); }
+.modal:has(>.detail-grid) .detail-comment .eyebrow { font-size:9px; line-height:1.7; letter-spacing:1px; }
+.modal:has(>.detail-grid) .detail-comment p { color:var(--ink); font-size:12px; line-height:1.8; margin-top:9px; }
+.modal:has(>.detail-grid)>.text-link { max-width:100%; text-align:left; line-height:1.6; }
+.modal:has(>.detail-grid) .modal-actions { border-color:var(--line); margin-top:20px; padding-top:17px; flex-wrap:wrap; }
+.modal:has(>.detail-grid) .modal-actions .secondary { color:var(--paper); background:var(--ink); }
+.modal:has(>.detail-grid) .modal-actions .secondary:hover { background:#345769; }
+.modal:has(>.detail-grid) .danger-quiet { color:#A34E3E; }
+
+:is(.diary-page,.modal:has(>.detail-grid)) .compact-program { margin:16px 0 0; }
+:is(.diary-page,.modal:has(>.detail-grid)) .compact-program>h3 { margin:0 0 5px; padding:11px 0 8px; border-top:1px solid var(--line); color:var(--slate); font-size:11px; font-weight:600; line-height:1.7; overflow-wrap:anywhere; }
+:is(.diary-page,.modal:has(>.detail-grid)) .diary-exercise { border-color:var(--line); }
+:is(.diary-page,.modal:has(>.detail-grid)) .exercise-quick-button { min-height:44px; border-radius:0; padding:9px 7px; column-gap:12px; row-gap:5px; }
+:is(.diary-page,.modal:has(>.detail-grid)) .exercise-quick-button:hover { background:#DDE5E180; }
+:is(.diary-page,.modal:has(>.detail-grid)) .exercise-quick-info { flex-basis:160px; }
+:is(.diary-page,.modal:has(>.detail-grid)) .exercise-quick-info strong { font-size:12px; line-height:1.6; font-weight:500; color:var(--ink); }
+:is(.diary-page,.modal:has(>.detail-grid)) .exercise-quick-info small,
+:is(.diary-page,.modal:has(>.detail-grid)) .exercise-description-caption { font-size:10px; line-height:1.6; color:var(--slate); }
+:is(.diary-page,.modal:has(>.detail-grid)) .exercise-quick-time { min-width:38px; min-height:28px; font-size:14px; font-weight:600; color:var(--ink); }
+:is(.diary-page,.modal:has(>.detail-grid)) .exercise-quick-time>.icon { width:19px; height:19px; color:var(--slate); }
+:is(.diary-page,.modal:has(>.detail-grid)) .record-marker { color:var(--coral); }
+.modal:has(>.detail-grid) .exercise-extra { padding:4px 7px 11px; font-size:11px; color:var(--slate); }
+.modal:has(>.detail-grid) .exercise-extra summary { min-height:32px; padding:5px 0; }
+.modal:has(>.detail-grid) .exercise-extra .exercise-list { margin:7px 0 0; padding-left:20px; }
+.modal:has(>.detail-grid) .exercise-list li { line-height:1.6; overflow-wrap:anywhere; }
+.modal:has(>.detail-grid) .exercise-list p { color:var(--slate); }
+
+@media(max-width:760px) {
+  .diary-page .page-header h1 { font-size:29px; }
+  .diary-page .page-header>.button { margin-top:20px; }
+  .diary-page .diary-toolbar { padding:12px 0; }
+  .diary-page .diary-inputs { gap:12px; }
+  .diary-page .diary-inputs select { font-size:11px; max-width:46%; }
+  .diary-page .search-box input { font-size:11px; }
+  .diary-page .diary-count { margin:15px 0 23px; flex-wrap:wrap; gap:3px 14px; }
+  .diary-page .diary-group>.section-intro h2 { font-size:21px; }
+  .diary-page .diary-group>.section-intro>.muted { font-size:11px; }
+  .diary-page .workout-row { grid-template-columns:60px minmax(0,1fr) minmax(74px,28%); gap:12px; align-items:start; padding:19px 0; }
+  .diary-page .entry-date { flex-direction:column; align-items:flex-start; gap:6px; }
+  .diary-page .entry-day { font-size:35px; letter-spacing:-1.5px; }
+  .diary-page .entry-date-caption { flex-direction:row; flex-wrap:wrap; gap:3px 5px; font-size:9px; }
+  .diary-page .entry-date-caption>span:last-child { font-size:9px; letter-spacing:0; }
+  .diary-page .workout-title { font-size:14px; }
+  .diary-page .workout-subtitle,.diary-page .workout-comment { font-size:10px; }
+  .diary-page .workout-numbers strong { font-size:25px; letter-spacing:-.7px; }
+  .diary-page .workout-numbers strong small { font-size:11px; }
+  .diary-page .workout-numbers>span { font-size:9px; }
+  .diary-page .unknown-distance strong { font-size:12px; letter-spacing:0; }
+  .diary-page .exercise-disclosure { padding:0 0 17px; }
+  .diary-page .exercise-disclosure>summary { min-height:40px; padding:9px 0; }
+  .modal:has(>.detail-grid) { width:calc(100% - 24px); padding:22px 18px; }
+  .modal:has(>.detail-grid) .modal-heading h2 { font-size:24px; }
+  .modal:has(>.detail-grid) .detail-grid { gap:18px 14px; }
+  .modal:has(>.detail-grid) .detail-grid strong { font-size:22px; }
+  .modal:has(>.detail-grid) .detail-grid>div:first-child strong { font-size:27px; }
+  :is(.diary-page,.modal:has(>.detail-grid)) .exercise-quick-button { padding:10px 3px; }
+  :is(.diary-page,.modal:has(>.detail-grid)) .exercise-quick-info { flex-basis:135px; }
+  :is(.diary-page,.modal:has(>.detail-grid)) .exercise-quick-time { min-height:32px; min-width:40px; font-size:13px; }
+}
+@media(max-width:420px) {
+  .diary-page .workout-row { grid-template-columns:54px minmax(0,1fr); row-gap:10px; }
+  .diary-page .entry-date { grid-column:1; grid-row:1 / span 2; }
+  .diary-page .workout-description { grid-column:2; }
+  .diary-page .workout-numbers { grid-column:2; grid-row:2; flex-direction:row; flex-wrap:wrap; align-items:baseline; gap:5px 10px; text-align:left; }
+  .diary-page .workout-numbers strong { font-size:24px; }
+  .diary-page .unknown-distance strong { font-size:12px; }
+  .diary-page .workout-numbers>span { max-width:100%; }
+}
+
+/* Statistics use one summary spread and open chart sections. */
+.stats-page .page-header { margin-bottom:27px; }
+.stats-page .page-header h1 { font-size:clamp(28px,3vw,38px); line-height:1.15; }
+.stats-page .page-header .eyebrow { font-size:9px; letter-spacing:2px; }
+.stats-page .stats-overview { display:grid; grid-template-columns:minmax(0,.9fr) minmax(0,1.65fr); align-items:center; gap:30px; padding:25px 0 28px; margin-bottom:30px; border-top:1px solid var(--ink); border-bottom:1px solid var(--line); }
+.stats-distance { min-width:0; }
+.stats-distance h2 { font-size:10px; font-weight:500; letter-spacing:1.7px; text-transform:uppercase; }
+.stats-distance-value { font-size:clamp(52px,5.6vw,80px); font-weight:750; letter-spacing:-3px; line-height:1.15; margin:10px 0 7px; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.stats-distance-value>span { font-size:22px; font-weight:400; letter-spacing:0; margin-left:10px; color:var(--slate); }
+.stats-distance>p { font-size:11px; color:var(--slate); line-height:1.7; }
+.stats-page .stats-facts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0; min-width:0; }
+.stats-facts .stat-card { min-width:0; background:transparent; border:0; border-left:1px solid var(--line); border-radius:0; padding:5px 16px; }
+.stats-facts .stat-card:last-child { padding-right:0; }
+.stats-facts .stat-label { font-size:11px; color:var(--slate); line-height:1.6; }
+.stats-facts .stat-label>.icon { display:none; }
+.stats-facts .stat-value { font-size:30px; line-height:1.2; margin-top:12px; font-weight:650; letter-spacing:-1px; white-space:normal; overflow-wrap:anywhere; }
+.stats-facts .stat-value>span { color:var(--slate); font-size:11px; }
+.stats-facts .stat-value>.stat-divider { margin:0 6px; font-size:22px; color:var(--coral); }
+.stats-facts .stat-card>p { font-size:10px; line-height:1.7; color:var(--slate); margin-top:9px; }
+.stats-page .panel { min-width:0; background:transparent; border:0; border-top:1px solid var(--ink); border-radius:0; padding:20px 0 0; }
+.stats-page .charts-grid { grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:32px; align-items:start; margin-bottom:30px; }
+.stats-page .charts-grid>.chart-panel:nth-child(2) { margin-top:20px; }
+.stats-page .panel-heading { align-items:flex-start; flex-wrap:wrap; gap:12px; }
+.stats-page .panel-heading h2 { font-family:var(--display); font-size:23px; line-height:1.2; }
+.stats-page .panel-heading .eyebrow { font-size:9px; letter-spacing:1.3px; margin-bottom:8px; }
+.stats-page .chart-description { font-size:11px; line-height:1.7; color:var(--slate); }
+.stats-page .chart-unit { background:transparent; border-bottom:1px solid var(--line); border-radius:0; padding:5px 0; color:var(--slate); }
+.stats-page .segmented { background:transparent; border:1px solid var(--line); border-radius:3px; padding:2px; }
+.stats-page .segmented.small button { font-size:10px; padding:7px 11px; min-height:34px; color:var(--slate); }
+.stats-page .segmented button.selected { background:var(--ink); color:var(--paper); box-shadow:none; }
+.stats-page .bar-chart { margin-top:24px; }
+.stats-page .chart-gridlines span { border-color:var(--line); color:var(--slate); font-size:10px; }
+.stats-page .bars { gap:14px; }
+.stats-page .bar { border-radius:1px 1px 0 0; background:var(--blue); }
+.stats-page .bar.current { background:var(--coral); }
+.stats-page .bar-number { color:var(--ink); background:var(--paper); font-size:10px; }
+.stats-page .bar-label { font-size:10px; color:var(--slate); }
+.stats-page .pace-panel { margin-bottom:30px; }
+.stats-page #pace-selection { border-radius:3px; border-color:var(--line); background:var(--white); color:var(--ink); font-size:11px; }
+.stats-page .pace-chart svg line { stroke:var(--line); stroke-dasharray:2 6; }
+.stats-page .pace-chart svg text { fill:var(--slate); }
+.stats-page .pace-chart svg polyline { stroke:var(--ink); stroke-width:2; }
+.stats-page .pace-chart svg circle { fill:var(--blue); stroke:var(--paper); }
+.stats-page .pace-chart svg circle:last-of-type { fill:var(--coral); }
+.stats-page .single-point-note,.stats-page .chart-data { color:var(--slate); }
+.stats-page .chart-data summary { min-height:36px; padding:6px 0; }
+.stats-page .table-wrap { max-width:100%; }
+.stats-page th { border-color:var(--line); color:var(--slate); font-size:10px; padding-top:20px; }
+.stats-page td { border-color:var(--line); color:var(--ink); font-variant-numeric:tabular-nums; }
+.stats-page td strong { color:var(--ink); font-weight:650; }
+.stats-page .table-style { color:var(--slate); }
+.stats-page .best-time { color:#A84D3C; font-size:15px; font-weight:650; }
+.stats-page .record-badge { color:#A84D3C; }
+.stats-page .records-empty,.stats-page .empty-state p { color:var(--slate); }
+.stats-page .empty-symbol { border-radius:3px; background:var(--blue-light); }
+.stats-page .empty-state h3 { font-family:var(--display); font-size:22px; }
+
+@media(max-width:1050px) {
+  .stats-page .stats-overview { grid-template-columns:minmax(0,1fr); gap:22px; }
+  .stats-facts .stat-card { padding:0 18px; }
+  .stats-facts .stat-card:first-child { border-left:0; padding-left:0; }
+  .stats-page .charts-grid { grid-template-columns:minmax(0,1fr); gap:27px; }
+  .stats-page .charts-grid>.chart-panel:nth-child(2) { margin-top:0; }
+}
+@media(max-width:760px) {
+  :is(.diary-page,.stats-page) .page-header { display:block; }
+  :is(.diary-page,.stats-page) .page-header>.button[data-action="add"] { width:auto; height:auto; min-height:44px; margin-top:17px; padding:12px 17px; border-radius:4px; font-size:12px; background:#B84D3B; color:#FFF9EB; }
+  :is(.diary-page,.stats-page) .page-header>.button[data-action="add"]:hover { background:#9E3F30; }
+  :is(.diary-page,.stats-page) .page-header>.button[data-action="add"]>span { position:static; width:auto; height:auto; overflow:visible; clip:auto; }
+  :is(.diary-page,.stats-page) .page-header>.button[data-action="add"]>.icon { width:18px; height:18px; }
+  .stats-page .page-header h1 { font-size:29px; }
+  .stats-page .stats-overview { padding:22px 0; margin-bottom:25px; }
+  .stats-distance-value { font-size:58px; }
+  .stats-facts .stat-card { padding:0 12px; }
+  .stats-facts .stat-value { font-size:26px; }
+  .stats-facts .stat-label { font-size:10px; }
+  .stats-facts .stat-card>p { font-size:9px; }
+  .stats-page .panel-heading h2 { font-size:22px; }
+  .stats-page .segmented.small button { min-height:40px; }
+  .stats-page .pace-chart svg { min-width:440px; }
+  .stats-page .records-panel .icon-button { width:40px; height:40px; }
+  .stats-page .record-badge { max-width:none; }
+}
+@media(max-width:480px) {
+  .stats-page .stats-facts { grid-template-columns:minmax(0,1fr); }
+  .stats-facts .stat-card { display:grid; grid-template-columns:minmax(0,1fr) minmax(80px,40%); gap:5px 12px; padding:12px 0; border:0; border-top:1px solid var(--line); }
+  .stats-facts .stat-card:first-child { padding-top:12px; }
+  .stats-facts .stat-label { grid-column:1; grid-row:1; font-size:11px; }
+  .stats-facts .stat-card>p { grid-column:1; grid-row:2; margin:0; font-size:10px; }
+  .stats-facts .stat-value { grid-column:2; grid-row:1 / span 2; margin:0; align-self:center; text-align:right; }
 }
