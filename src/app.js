@@ -4,7 +4,8 @@ import {
   recordKey, createDemo, parseBackup, backupJSON, totalDistance, totalDuration,
   exercisesOf, blockDistance, formatCentiseconds, timedResults, copyWorkout, templateWorkouts,
 } from './domain.js';
-import { statisticsData, dailyPaceSeries } from './statistics.js';
+import { statisticsData, dailyPaceSeries, createRecordPreview } from './statistics.js';
+import { achievementsData } from './achievements.js';
 import { readWorkouts, writeWorkouts, STORAGE_KEY } from './storage.js';
 import { editorHTML, mountEditor, newBlock } from './editor.js';
 import { resultDraft, resultOverview, resultsEditorHTML, mountResultsEditor, withExerciseResults, discardHTML, protectEditor } from './results-editor.js';
@@ -47,7 +48,7 @@ let workouts = [];
 let storageError = '';
 try { workouts = readWorkouts(localStorage); }
 catch { storageError = 'Не удалось прочитать сохранённый дневник. Исходные данные не изменены. Откройте «Данные» для восстановления.'; }
-let view = ['dashboard', 'diary', 'stats'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'dashboard';
+let view = ['dashboard', 'diary', 'stats', 'achievements'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'dashboard';
 let calendarMonth = today.slice(0, 7);
 let demo = false;
 let realWorkouts = [];
@@ -56,6 +57,7 @@ let filterMonth = '';
 let filterSearch = '';
 let statsPeriod = 'all';
 let selectedPace = '';
+let recordPreview = null;
 let toastTimer;
 let lastFocus;
 let pendingImport = null;
@@ -100,25 +102,27 @@ function statCard(label, value, unit, caption, symbol, accent = false) {
 }
 function render() {
   const stats = summary(workouts, today);
-  const titles = { dashboard: ['МОЁ ПРОСТРАНСТВО', 'Хороший день для воды'], diary: ['МОЯ ИСТОРИЯ', 'Дневник тренировок'], stats: ['МОЙ ПРОГРЕСС', 'Каждый заплыв имеет значение'] };
+  const titles = { dashboard: ['МОЁ ПРОСТРАНСТВО', 'Хороший день для воды'], diary: ['МОЯ ИСТОРИЯ', 'Дневник тренировок'], stats: ['МОЙ ПРОГРЕСС', 'Каждый заплыв имеет значение'], achievements: ['МОЯ КОЛЛЕКЦИЯ', 'Личные достижения'] };
+  const activeNav = view === 'achievements' ? 'stats' : view;
   app.innerHTML = `
     <a class="skip-link" href="#main">К содержимому</a>
     <aside class="sidebar">
       <a class="brand" href="#dashboard" aria-label="Нырок — на главную"><img class="brand-symbol" src="/src/nyrok-logo.svg" width="42" height="42" alt=""><span>нырок<span class="brand-dot">.</span><small>дневник плавания</small></span></a>
       <div class="sidebar-label">ВАШ ДНЕВНИК</div>
-      <nav aria-label="Основная навигация">${nav.map(([key, symbol, label]) => `<a href="#${key}" class="nav-item ${view === key ? 'active' : ''}" ${view === key ? 'aria-current="page"' : ''}>${icon(symbol)}<span>${label}</span>${view === key ? '<span class="nav-dot"></span>' : ''}</a>`).join('')}</nav>
+      <nav aria-label="Основная навигация">${nav.map(([key, symbol, label]) => `<a href="#${key}" class="nav-item ${activeNav === key ? 'active' : ''}" ${activeNav === key ? `aria-current="${view === key ? 'page' : 'location'}"` : ''}>${icon(symbol)}<span>${label}</span>${activeNav === key ? '<span class="nav-dot"></span>' : ''}</a>`).join('')}</nav>
       <button class="button primary sidebar-add" data-action="add">${icon('plus')}<span>Добавить тренировку</span></button>
       <div class="sidebar-note"><div class="small-waves">${icon('wave')}</div><p>Не быстрее других.<br>Ближе к себе.</p><span>Плывите в своём ритме</span></div>
       <div class="sidebar-bottom"><button class="nav-item" data-action="settings">${icon('settings')}<span>Данные и настройки</span></button><div class="local-label"><span class="status-dot"></span>Хранится на этом устройстве</div></div>
     </aside>
-    <main id="main" class="${view === 'dashboard' ? 'journal-page' : view === 'diary' ? 'diary-page' : 'stats-page'}" tabindex="-1">
+    <main id="main" class="${view === 'dashboard' ? 'journal-page' : view === 'diary' ? 'diary-page' : view === 'achievements' ? 'stats-page achievements-page' : 'stats-page'}" tabindex="-1">
       ${demo ? `<div class="demo-banner"><span>Вы смотрите пример. Эти записи не сохраняются в вашем дневнике.</span><button data-action="demo-off">Вернуться к моим данным ${icon('close')}</button></div>` : ''}
       ${storageError ? `<div class="error-banner" role="alert">${esc(storageError)} <button data-action="settings">Открыть данные</button></div>` : ''}
-      ${view === 'dashboard' ? journalHeader() : `<header class="page-header"><div><p class="eyebrow">${titles[view][0]}</p><h1>${titles[view][1]}<span class="title-dot">.</span></h1><p class="header-date">${view === 'diary' ? 'Место для больших дистанций и маленьких побед.' : 'Замечайте изменения, наслаждайтесь процессом.'}</p></div><button class="button primary" data-action="add">${icon('plus')}<span>Добавить тренировку</span></button></header>`}
-      ${view === 'dashboard' ? dashboard(stats) : view === 'diary' ? diary() : statistics()}
+      ${view === 'achievements' ? `<a class="text-link achievements-back" href="#stats">${icon('left')}К статистике</a>` : ''}
+      ${view === 'dashboard' ? journalHeader() : `<header class="page-header"><div><p class="eyebrow">${titles[view][0]}</p><h1>${titles[view][1]}<span class="title-dot">.</span></h1><p class="header-date">${view === 'diary' ? 'Место для больших дистанций и маленьких побед.' : view === 'achievements' ? 'Ваши лучшие результаты за всю историю, по сегодняшний день.' : 'Замечайте изменения, наслаждайтесь процессом.'}</p></div><button class="button primary" data-action="add">${icon('plus')}<span>Добавить тренировку</span></button></header>`}
+      ${view === 'dashboard' ? dashboard(stats) : view === 'diary' ? diary() : view === 'achievements' ? achievements() : statistics()}
       <footer class="page-footer"><span>НЫРОК <span class="footer-dot">•</span> В своём ритме</span><span>${icon('shield')} Только вы и ваша история</span></footer>
     </main>
-    <nav class="mobile-nav" aria-label="Мобильная навигация">${nav.map(([key, symbol, label]) => `<a href="#${key}" class="${view === key ? 'active' : ''}" ${view === key ? 'aria-current="page"' : ''}>${icon(symbol)}${label}</a>`).join('')}<button data-action="settings">${icon('settings')}Данные</button></nav>`;
+    <nav class="mobile-nav" aria-label="Мобильная навигация">${nav.map(([key, symbol, label]) => `<a href="#${key}" class="${activeNav === key ? 'active' : ''}" ${activeNav === key ? `aria-current="${view === key ? 'page' : 'location'}"` : ''}>${icon(symbol)}${label}</a>`).join('')}<button data-action="settings">${icon('settings')}Данные</button></nav>`;
   if (view === 'stats') mountPaceTooltip();
 }
 function journalHeader() {
@@ -203,6 +207,8 @@ function barChart(series, metric, label, unit, daily = false) {
 }
 function statistics() {
   const { selected, stats, chartSeries, records } = statisticsData(workouts, statsPeriod, today);
+  recordPreview ??= createRecordPreview(personalBests(workouts.filter(workout => workout.date <= today)));
+  const previewRecords = recordPreview(records);
   if (!records.some(w => recordKey(w) === selectedPace)) selectedPace = records[0] ? recordKey(records[0]) : '';
   const daily = statsPeriod === 'week';
   const chartRange = daily ? 'Текущая неделя · будущие дни без данных'
@@ -219,7 +225,28 @@ function statistics() {
     <section class="charts-grid"><article class="panel chart-panel"><div class="panel-heading"><div><p class="eyebrow">РЕГУЛЯРНОСТЬ</p><h2>Встречи с водой</h2></div></div><p class="chart-description">Количество тренировок · ${chartRange}</p>${barChart(chartSeries, 'count', 'Количество тренировок', 'тренировок', daily)}</article>
     <article class="panel chart-panel"><div class="panel-heading"><div><p class="eyebrow">ДИСТАНЦИЯ</p><h2>Метр за метром</h2></div><span class="chart-unit">метры</span></div><p class="chart-description">Известная дистанция · ${chartRange}</p>${barChart(chartSeries, 'distance', daily ? 'Дистанция по дням' : statsPeriod === 'month' ? 'Дистанция по неделям месяца' : 'Дистанция по месяцам', 'м', daily)}</article></section>
     <article class="panel pace-panel"><div class="panel-heading"><div><p class="eyebrow">ЗАПЛЫВЫ НА ВРЕМЯ</p><h2>Как меняется ваш темп</h2></div>${records.length ? `<select id="pace-selection" aria-label="Дистанция, стиль и техника для графика темпа">${records.map(w => `<option value="${esc(recordKey(w))}" ${recordKey(w) === selectedPace ? 'selected' : ''}>${w.distance} м · ${STYLES[w.style]}${w.technique ? ' · ' + esc(w.technique) : ''}</option>`).join('')}</select>` : ''}</div><p class="chart-description">Темп на 100 м · лучший результат каждого дня за выбранный период. Дистанции, стили и техники учитываются отдельно. Нажмите на точку, чтобы увидеть время.</p>${records.length ? paceChart(dailyPaceSeries(selected, selectedPace)) : emptyState('В этом периоде пока нет результатов', 'Выберите другой период или запишите время заплыва. Результаты сравниваются на одинаковой дистанции, в одном стиле и с одинаковым уточнением техники.', 'add-timed', 'Записать результат', 'chart')}</article>
-    <article class="panel records-panel"><div class="panel-heading"><div><p class="eyebrow">ЛИЧНЫЕ ДОСТИЖЕНИЯ</p><h2>Ваши лучшие заплывы</h2></div><span class="record-badge">${icon('trophy')} Маленькие победы</span></div>${records.length ? `<div class="table-wrap"><table><thead><tr><th>Дистанция и стиль</th><th>Результат</th><th>Темп / 100 м</th><th>Дата</th><th><span class="sr-only">Подробнее</span></th></tr></thead><tbody>${records.map(w => `<tr><td><strong>${w.distance} м</strong><span class="table-style">${STYLES[w.style]}${w.technique ? ' · ' + esc(w.technique) : ''}</span></td><td class="best-time">${formatCentiseconds(w.timeCs)}</td><td>${formatCentiseconds(pace(w) * 100)}</td><td>${dateLabel(w.date, { day: 'numeric', month: 'short', year: 'numeric' })}</td><td><button class="icon-button" data-action="detail" data-id="${esc(w.id)}" aria-label="Открыть рекорд ${w.distance} м ${STYLES[w.style]}">${icon('arrow')}</button></td></tr>`).join('')}</tbody></table></div>` : `<p class="records-empty">Здесь появятся лучшие результаты для каждой дистанции и стиля. Соревнуйтесь только с собой — и только если хочется.</p>`}</article>`;
+    <article class="panel records-panel"><div class="panel-heading"><div><p class="eyebrow">ЛИЧНЫЕ ДОСТИЖЕНИЯ</p><h2>Ваши лучшие заплывы</h2></div><span class="record-badge">${icon('trophy')} Маленькие победы</span></div>${records.length ? `<div class="table-wrap"><table><thead><tr><th>Дистанция и стиль</th><th>Результат</th><th>Темп / 100 м</th><th>Дата</th><th><span class="sr-only">Подробнее</span></th></tr></thead><tbody>${previewRecords.map(w => `<tr><td><strong>${w.distance} м</strong><span class="table-style">${STYLES[w.style]}${w.technique ? ' · ' + esc(w.technique) : ''}</span></td><td class="best-time">${formatCentiseconds(w.timeCs)}</td><td>${formatCentiseconds(pace(w) * 100)}</td><td>${dateLabel(w.date, { day: 'numeric', month: 'short', year: 'numeric' })}</td><td><button class="icon-button" data-action="detail" data-id="${esc(w.id)}" aria-label="Открыть рекорд ${w.distance} м ${STYLES[w.style]}">${icon('arrow')}</button></td></tr>`).join('')}</tbody></table></div>` : `<p class="records-empty">Здесь появятся лучшие результаты для каждой дистанции и стиля. Соревнуйтесь только с собой — и только если хочется.</p>`}<div class="records-footer"><a href="#achievements" class="text-link">Все достижения ${icon('arrow')}</a></div></article>`;
+}
+function achievementRow(distance, style, record, showDistance = false) {
+  const label = `${distance} м · ${STYLES[style]}${record?.technique ? ' · ' + record.technique : ''}`;
+  return `<li class="achievement-row ${record ? 'has-record' : 'not-yet'}">
+    <div class="achievement-discipline"><strong>${showDistance ? `${number(distance)} м · ` : ''}${STYLES[style]}</strong>${record?.technique ? `<span>${esc(record.technique)}</span>` : ''}</div>
+    ${record ? `<dl class="achievement-values">
+      <div><dt>Лучшее время</dt><dd class="achievement-time">${formatCentiseconds(record.timeCs)}</dd></div>
+      <div><dt>Темп / 100 м</dt><dd>${formatCentiseconds(pace(record) * 100)}</dd></div>
+      <div><dt>Дата</dt><dd class="achievement-date">${dateLabel(record.date, { day: 'numeric', month: 'short', year: 'numeric' })}</dd></div>
+    </dl><button class="icon-button achievement-open" data-action="detail" data-id="${esc(record.id)}" aria-label="Открыть тренировку: ${esc(label)}">${icon('arrow')}</button>` : '<p class="achievement-pending">Ещё не проплыто</p>'}
+  </li>`;
+}
+function achievements() {
+  const { standard, other } = achievementsData(workouts, today);
+  return `<section class="achievements-standard" aria-labelledby="standard-achievements">
+    <div class="panel-heading"><div><p class="eyebrow">ДИСТАНЦИИ ДЛЯ СЕБЯ</p><h2 id="standard-achievements">Стандартные дисциплины</h2></div></div>
+    <p class="achievements-description">25-метровый бассейн · дистанция и стиль без дополнительного уточнения техники. Каждая непройденная дистанция — приглашение попробовать.</p>
+    ${standard.map(group => `<section class="achievement-group" aria-labelledby="achievement-distance-${group.distance}"><h3 id="achievement-distance-${group.distance}" class="achievement-distance">${number(group.distance)} <span>м</span></h3><ul class="achievement-list">${group.disciplines.map(({ style, record }) => achievementRow(group.distance, style, record)).join('')}</ul></section>`).join('')}
+    </section>
+    <section class="achievements-other" aria-labelledby="other-achievements"><div class="panel-heading"><div><p class="eyebrow">ВАШ СОБСТВЕННЫЙ МАРШРУТ</p><h2 id="other-achievements">Другие достижения</h2></div></div><p class="achievements-description">Другие дистанции, стили и заплывы с уточнением техники.</p>
+    ${other.length ? `<ul class="achievement-list">${other.map(record => achievementRow(record.distance, record.style, record, true)).join('')}</ul>` : '<p class="records-empty">Здесь появятся ваши рекорды на других дистанциях и в отдельных техниках.</p>'}</section>`;
 }
 function paceChart(series) {
   if (!series.length) return '<p class="records-empty">В этом периоде пока нет результатов.</p>';
@@ -459,8 +486,9 @@ function download(text, name) {
 }
 function navigate() {
   const target = location.hash.slice(1);
-  if (!['dashboard', 'diary', 'stats'].includes(target)) return;
+  if (!['dashboard', 'diary', 'stats', 'achievements'].includes(target)) return;
   if (!closeModal()) { history.replaceState(null, '', `#${view}`); return; }
+  if (target === 'stats' && view !== 'stats') recordPreview = null;
   view = target; render(); window.scrollTo({ top: 0, behavior: 'instant' });
 }
 window.addEventListener('hashchange', navigate);

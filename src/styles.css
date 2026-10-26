@@ -458,6 +458,44 @@ button:focus-visible,a:focus-visible,summary:focus-visible { outline-color:var(-
 .stats-page .records-empty,.stats-page .empty-state p { color:var(--slate); }
 .stats-page .empty-symbol { border-radius:3px; background:var(--blue-light); }
 .stats-page .empty-state h3 { font-family:var(--display); font-size:22px; }
+.stats-page .records-footer { display:flex; justify-content:flex-end; padding-top:16px; }
+.records-footer .text-link,.achievements-back { min-height:44px; }
+.achievements-back { margin-bottom:16px; }
+.achievements-description { max-width:660px; color:var(--slate); font-size:12px; line-height:1.8; margin:0 0 24px; }
+.achievement-group { display:grid; grid-template-columns:130px minmax(0,1fr); column-gap:24px; padding:22px 0 0; border-top:1px solid var(--ink); margin-bottom:28px; }
+.achievement-distance { margin:0; color:var(--ink); font-size:38px; line-height:1.2; font-weight:700; letter-spacing:-1.5px; font-variant-numeric:tabular-nums; }
+.achievement-distance>span { font-size:16px; font-weight:400; letter-spacing:0; color:var(--slate); }
+.achievement-list { margin:0; padding:0; list-style:none; min-width:0; }
+.achievement-row { display:grid; grid-template-columns:minmax(100px,1fr) minmax(0,2.5fr) 44px; align-items:center; gap:16px; padding:16px 0; border-bottom:1px solid var(--line); }
+.achievement-row:first-child { padding-top:0; }
+.achievement-discipline { min-width:0; overflow-wrap:anywhere; }
+.achievement-discipline>strong { font-size:13px; font-weight:600; }
+.achievement-discipline>span { display:block; margin-top:6px; color:var(--slate); font-size:11px; line-height:1.6; }
+.achievement-values { display:grid; grid-template-columns:1fr 1fr 1.3fr; gap:12px; margin:0; min-width:0; }
+.achievement-values>div { min-width:0; }
+.achievement-values dt { margin-bottom:6px; font-size:10px; color:var(--slate); }
+.achievement-values dd { margin:0; font-size:15px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.achievement-values .achievement-time { color:#A84D3C; font-size:19px; font-weight:650; }
+.achievement-values .achievement-date { font-size:11px; line-height:1.6; }
+.achievement-open { width:44px; height:44px; border-radius:3px; }
+.achievement-pending { grid-column:2 / -1; margin:0; color:var(--slate); font-size:12px; line-height:1.6; }
+.achievement-row.not-yet .achievement-discipline { color:var(--slate); }
+.achievements-other { border-top:1px solid var(--ink); padding-top:24px; margin-top:38px; }
+@media(max-width:1200px) {
+  .achievement-group { grid-template-columns:minmax(0,1fr); row-gap:18px; }
+}
+@media(max-width:760px) {
+  .achievement-distance { font-size:32px; }
+  .achievement-row { grid-template-columns:minmax(0,1fr) 44px; gap:12px; }
+  .achievement-discipline { grid-column:1; grid-row:1; }
+  .achievement-values { grid-column:1; grid-row:2; }
+  .achievement-open { grid-column:2; grid-row:1 / span 2; align-self:start; }
+  .achievement-pending { grid-column:1 / -1; grid-row:2; }
+}
+@media(max-width:480px) {
+  .achievement-values { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .achievement-values>div:last-child { grid-column:1 / -1; }
+}
 
 @media(min-width:1051px) {
   .stats-page .charts-grid { grid-template-rows:auto auto auto; row-gap:0; }

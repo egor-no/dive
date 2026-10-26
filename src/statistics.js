@@ -1,4 +1,4 @@
-import { dateKey, shiftDate, monthKey, summary, monthlySeries, totalDistance, personalBests, paceSeries } from './domain.js';
+import { dateKey, shiftDate, monthKey, summary, monthlySeries, totalDistance, personalBests, paceSeries, recordKey } from './domain.js';
 
 const weekStart = today => shiftDate(today, -((new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7));
 
@@ -45,4 +45,26 @@ export function dailyPaceSeries(workouts, key) {
     if (!days.has(result.date) || result.timeCs < days.get(result.date).timeCs) days.set(result.date, result);
   }
   return [...days.values()];
+}
+
+export function createRecordPreview(records, random = Math.random) {
+  const keys = [...new Set(records.map(recordKey))];
+  // Shuffle disciplines once per visit, so period changes never redraw their priorities.
+  for (let i = keys.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [keys[i], keys[j]] = [keys[j], keys[i]];
+  }
+  const priorities = new Map(keys.map((key, index) => [key, index]));
+  return candidates => {
+    const unique = new Map();
+    for (const record of candidates) {
+      const key = recordKey(record);
+      if (!unique.has(key)) unique.set(key, record);
+      // New disciplines can fill free slots without displacing the existing selection.
+      if (!priorities.has(key)) priorities.set(key, priorities.size);
+    }
+    const chosen = new Set([...unique.keys()].sort((a, b) => priorities.get(a) - priorities.get(b)).slice(0, 6));
+    // Keep the current list order and use fresh results from the selected period.
+    return [...unique].filter(([key]) => chosen.has(key)).map(([, record]) => record);
+  };
 }
