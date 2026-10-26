@@ -1,9 +1,10 @@
 import {
   STYLES, dateKey, monthKey, validateWorkout, summary, sortedWorkouts, formatTime,
-  pace, personalBests, previousResult, monthlySeries, weeklySeries, paceSeries,
+  pace, personalBests, previousResult, dayNumber,
   recordKey, createDemo, parseBackup, backupJSON, totalDistance, totalDuration,
   exercisesOf, blockDistance, formatCentiseconds, timedResults, copyWorkout, templateWorkouts,
 } from './domain.js';
+import { statisticsData, dailyPaceSeries } from './statistics.js';
 import { readWorkouts, writeWorkouts, STORAGE_KEY } from './storage.js';
 import { editorHTML, mountEditor, newBlock } from './editor.js';
 import { resultDraft, resultOverview, resultsEditorHTML, mountResultsEditor, withExerciseResults, discardHTML, protectEditor } from './results-editor.js';
@@ -53,7 +54,7 @@ let realWorkouts = [];
 
 let filterMonth = '';
 let filterSearch = '';
-let chartPeriod = 'month';
+let statsPeriod = 'all';
 let selectedPace = '';
 let toastTimer;
 let lastFocus;
@@ -114,10 +115,11 @@ function render() {
       ${demo ? `<div class="demo-banner"><span>Вы смотрите пример. Эти записи не сохраняются в вашем дневнике.</span><button data-action="demo-off">Вернуться к моим данным ${icon('close')}</button></div>` : ''}
       ${storageError ? `<div class="error-banner" role="alert">${esc(storageError)} <button data-action="settings">Открыть данные</button></div>` : ''}
       ${view === 'dashboard' ? journalHeader() : `<header class="page-header"><div><p class="eyebrow">${titles[view][0]}</p><h1>${titles[view][1]}<span class="title-dot">.</span></h1><p class="header-date">${view === 'diary' ? 'Место для больших дистанций и маленьких побед.' : 'Замечайте изменения, наслаждайтесь процессом.'}</p></div><button class="button primary" data-action="add">${icon('plus')}<span>Добавить тренировку</span></button></header>`}
-      ${view === 'dashboard' ? dashboard(stats) : view === 'diary' ? diary() : statistics(stats)}
+      ${view === 'dashboard' ? dashboard(stats) : view === 'diary' ? diary() : statistics()}
       <footer class="page-footer"><span>НЫРОК <span class="footer-dot">•</span> В своём ритме</span><span>${icon('shield')} Только вы и ваша история</span></footer>
     </main>
     <nav class="mobile-nav" aria-label="Мобильная навигация">${nav.map(([key, symbol, label]) => `<a href="#${key}" class="${view === key ? 'active' : ''}" ${view === key ? 'aria-current="page"' : ''}>${icon(symbol)}${label}</a>`).join('')}<button data-action="settings">${icon('settings')}Данные</button></nav>`;
+  if (view === 'stats') mountPaceTooltip();
 }
 function journalHeader() {
   return `<header class="journal-header">
@@ -191,39 +193,100 @@ function diary() {
     <div class="diary-count">${items.length} ${plural(items.length, 'запись', 'записи', 'записей')} <span>Всё начинается с одного заплыва</span></div>
     ${items.length ? [...groups].map(([key, entries]) => `<section class="diary-group"><div class="section-intro"><h2>${monthLabel(key)}</h2><span class="muted">${number(entries.reduce((sum, w) => sum + (totalDistance(w) || 0), 0))} м</span></div><div class="panel diary-list">${entries.map(w => workoutRow(w)).join('')}</div></section>`).join('') : `<section class="panel">${emptyState(workouts.length ? 'Таких записей пока нет' : 'Ваша история начинается здесь', workouts.length ? 'Попробуйте другой месяц или поисковый запрос.' : 'Добавляйте тренировки с результатами или просто отмечайте дни, проведённые в бассейне.', workouts.length ? 'reset-filters' : 'add', workouts.length ? 'Сбросить фильтры' : 'Добавить тренировку', 'book')}</section>`}`;
 }
-function barChart(series, metric, label, unit, weekly = false) {
+function barChart(series, metric, label, unit, daily = false) {
   const max = Math.max(...series.map(item => item[metric]), 1);
-  return `<div class="bar-chart" role="img" aria-label="${label}: ${series.map(item => `${item.key} — ${item[metric]} ${unit}`).join('; ')}"><div class="chart-gridlines"><span>${number(max)}</span><span>${number(max / 2)}</span><span>0</span></div><div class="bars">${series.map(item => `<div class="bar-column"><span class="bar-number">${number(item[metric])}</span><div class="bar-track"><div class="bar ${item.key.startsWith(today.slice(0, 7)) && !weekly ? 'current' : ''}" style="height:${item[metric] ? Math.max(2, item[metric] / max * 100) : 0}%"></div></div><span class="bar-label">${weekly ? dateLabel(item.key, { day: 'numeric', month: 'short' }).replace('.', '') : dateLabel(`${item.key}-01`, { month: 'short' }).replace('.', '')}</span></div>`).join('')}</div></div>`;
+  const current = item => item.end ? item.key <= today && item.end >= today : daily ? item.key === today : item.key === today.slice(0, 7);
+  const axisLabel = item => item.end ? `${dateLabel(item.key, { day: 'numeric', month: 'short' }).replace('.', '')}<br>– ${dateLabel(item.end, { day: 'numeric', month: 'short' }).replace('.', '')}`
+    : daily ? `${dateLabel(item.key, { weekday: 'short' })}<br>${dateLabel(item.key, { day: 'numeric' })}`
+    : dateLabel(`${item.key}-01`, { month: 'short' }).replace('.', '');
+  return `<div class="bar-chart" role="img" aria-label="${label}: ${series.map(item => `${item.key}${item.end ? ' — ' + item.end : ''} — ${item.future ? 'будущий период, нет данных' : `${item[metric]} ${unit}`}`).join('; ')}"><div class="chart-gridlines"><span>${number(max)}</span><span>${number(max / 2)}</span><span>0</span></div><div class="bars">${series.map(item => `<div class="bar-column${item.future ? ' future' : ''}"><span class="bar-number">${item.future ? '—' : number(item[metric])}</span><div class="bar-track"><div class="bar ${current(item) ? 'current' : ''}" style="height:${item[metric] ? Math.max(2, item[metric] / max * 100) : 0}%"></div></div><span class="bar-label">${axisLabel(item)}</span></div>`).join('')}</div></div>`;
 }
-function statistics(stats) {
-  const records = personalBests(workouts);
+function statistics() {
+  const { selected, stats, chartSeries, records } = statisticsData(workouts, statsPeriod, today);
   if (!records.some(w => recordKey(w) === selectedPace)) selectedPace = records[0] ? recordKey(records[0]) : '';
-  const months = monthlySeries(workouts, today);
-  return `<section class="stats-overview" aria-label="Общие показатели">
+  const daily = statsPeriod === 'week';
+  const chartRange = daily ? 'Текущая неделя · будущие дни без данных'
+    : statsPeriod === 'month' ? `${monthLabel(today.slice(0, 7))} · полные недели пн–вс` : '6 последних календарных месяцев';
+  return `<div class="stats-period"><div class="segmented" role="group" aria-label="Период статистики">${[['week', 'Неделя'], ['month', 'Месяц'], ['all', 'Всё время']].map(([key, label]) => `<button data-action="stats-period" data-value="${key}" class="${statsPeriod === key ? 'selected' : ''}" aria-pressed="${statsPeriod === key}">${label}</button>`).join('')}</div><p>По ${dateLabel(today, { day: 'numeric', month: 'long', year: 'numeric' })} включительно</p></div>
+    <section class="stats-overview" aria-label="Общие показатели за выбранный период">
     <article class="stats-distance"><h2>Вся дистанция</h2><div class="stats-distance-value">${number(stats.distance / 1000)}<span>км</span></div><p>${stats.unknownDistance ? `${stats.unknownDistance} ${plural(stats.unknownDistance, 'запись', 'записи', 'записей')} без дистанции` : 'Каждый известный метр'}</p></article>
     <div class="stats-facts">
       ${statCard('Всего тренировок', number(stats.total), '', `${stats.days} ${plural(stats.days, 'день', 'дня', 'дней')} посещения бассейна`, 'wave')}
-      ${statCard('Неделя / месяц', `${stats.weekCount}<span class="stat-divider">/</span>${stats.monthCount}`, '', 'Неделя начинается в понедельник', 'calendar')}
-      ${statCard('Средний интервал', stats.average === null ? '—' : number(stats.average), stats.average === null ? '' : 'дн.', 'По уникальным дням за всё время', 'rhythm')}
+      ${statCard('Средний перерыв', stats.average === null ? '—' : number(stats.average), stats.average === null ? '' : 'дн.', 'Между тренировочными днями', 'rhythm')}
+      ${statCard('Средняя дистанция за тренировку', number(stats.averageDistance), 'м', 'Дистанция / число тренировок', 'wave')}
     </div>
     </section>
-    <section class="charts-grid"><article class="panel chart-panel"><div class="panel-heading"><div><p class="eyebrow">РЕГУЛЯРНОСТЬ</p><h2>Встречи с водой</h2></div><div class="segmented small">${[['week', 'Недели'], ['month', 'Месяцы']].map(([key, label]) => `<button data-action="chart-period" data-value="${key}" class="${chartPeriod === key ? 'selected' : ''}" aria-pressed="${chartPeriod === key}">${label}</button>`).join('')}</div></div><p class="chart-description">Количество тренировок · ${chartPeriod === 'week' ? '8 последних недель' : '6 последних месяцев'}</p>${barChart(chartPeriod === 'week' ? weeklySeries(workouts, today) : months, 'count', 'Количество тренировок', 'тренировок', chartPeriod === 'week')}</article>
-    <article class="panel chart-panel"><div class="panel-heading"><div><p class="eyebrow">ДИСТАНЦИЯ</p><h2>Метр за метром</h2></div><span class="chart-unit">метры</span></div><p class="chart-description">Известная дистанция · 6 последних месяцев</p>${barChart(months, 'distance', 'Дистанция по месяцам', 'м')}</article></section>
-    <article class="panel pace-panel"><div class="panel-heading"><div><p class="eyebrow">ЗАПЛЫВЫ НА ВРЕМЯ</p><h2>Как меняется ваш темп</h2></div>${records.length ? `<select id="pace-selection" aria-label="Дистанция и стиль для графика темпа">${records.map(w => `<option value="${esc(recordKey(w))}" ${recordKey(w) === selectedPace ? 'selected' : ''}>${w.distance} м · ${STYLES[w.style]}${w.technique ? ' · ' + esc(w.technique) : ''}</option>`).join('')}</select>` : ''}</div><p class="chart-description">Темп на 100 м. Результаты с уточнением техники учитываются отдельно от обычного стиля.</p>${records.length ? paceChart(paceSeries(workouts, selectedPace)) : emptyState('У вашего прогресса будет своя линия', 'Добавьте заплыв на время. Результаты сравниваются только на одинаковой дистанции и в одном стиле и с одинаковым уточнением техники.', 'add-timed', 'Записать результат', 'chart')}</article>
+    <section class="charts-grid"><article class="panel chart-panel"><div class="panel-heading"><div><p class="eyebrow">РЕГУЛЯРНОСТЬ</p><h2>Встречи с водой</h2></div></div><p class="chart-description">Количество тренировок · ${chartRange}</p>${barChart(chartSeries, 'count', 'Количество тренировок', 'тренировок', daily)}</article>
+    <article class="panel chart-panel"><div class="panel-heading"><div><p class="eyebrow">ДИСТАНЦИЯ</p><h2>Метр за метром</h2></div><span class="chart-unit">метры</span></div><p class="chart-description">Известная дистанция · ${chartRange}</p>${barChart(chartSeries, 'distance', daily ? 'Дистанция по дням' : statsPeriod === 'month' ? 'Дистанция по неделям месяца' : 'Дистанция по месяцам', 'м', daily)}</article></section>
+    <article class="panel pace-panel"><div class="panel-heading"><div><p class="eyebrow">ЗАПЛЫВЫ НА ВРЕМЯ</p><h2>Как меняется ваш темп</h2></div>${records.length ? `<select id="pace-selection" aria-label="Дистанция, стиль и техника для графика темпа">${records.map(w => `<option value="${esc(recordKey(w))}" ${recordKey(w) === selectedPace ? 'selected' : ''}>${w.distance} м · ${STYLES[w.style]}${w.technique ? ' · ' + esc(w.technique) : ''}</option>`).join('')}</select>` : ''}</div><p class="chart-description">Темп на 100 м · лучший результат каждого дня за выбранный период. Дистанции, стили и техники учитываются отдельно. Нажмите на точку, чтобы увидеть время.</p>${records.length ? paceChart(dailyPaceSeries(selected, selectedPace)) : emptyState('В этом периоде пока нет результатов', 'Выберите другой период или запишите время заплыва. Результаты сравниваются на одинаковой дистанции, в одном стиле и с одинаковым уточнением техники.', 'add-timed', 'Записать результат', 'chart')}</article>
     <article class="panel records-panel"><div class="panel-heading"><div><p class="eyebrow">ЛИЧНЫЕ ДОСТИЖЕНИЯ</p><h2>Ваши лучшие заплывы</h2></div><span class="record-badge">${icon('trophy')} Маленькие победы</span></div>${records.length ? `<div class="table-wrap"><table><thead><tr><th>Дистанция и стиль</th><th>Результат</th><th>Темп / 100 м</th><th>Дата</th><th><span class="sr-only">Подробнее</span></th></tr></thead><tbody>${records.map(w => `<tr><td><strong>${w.distance} м</strong><span class="table-style">${STYLES[w.style]}${w.technique ? ' · ' + esc(w.technique) : ''}</span></td><td class="best-time">${formatCentiseconds(w.timeCs)}</td><td>${formatCentiseconds(pace(w) * 100)}</td><td>${dateLabel(w.date, { day: 'numeric', month: 'short', year: 'numeric' })}</td><td><button class="icon-button" data-action="detail" data-id="${esc(w.id)}" aria-label="Открыть рекорд ${w.distance} м ${STYLES[w.style]}">${icon('arrow')}</button></td></tr>`).join('')}</tbody></table></div>` : `<p class="records-empty">Здесь появятся лучшие результаты для каждой дистанции и стиля. Соревнуйтесь только с собой — и только если хочется.</p>`}</article>`;
 }
 function paceChart(series) {
+  if (!series.length) return '<p class="records-empty">В этом периоде пока нет результатов.</p>';
   const width = 820, height = 190, pad = 35;
   const min = Math.max(0, Math.floor(Math.min(...series.map(w => w.pace)) / 10) * 10 - 10);
   const max = Math.ceil(Math.max(...series.map(w => w.pace)) / 10) * 10 + 10;
-  const x = i => series.length === 1 ? width / 2 : 66 + i / (series.length - 1) * (width - 100);
+  const firstDay = dayNumber(series[0].date), lastDay = dayNumber(series.at(-1).date);
+  const x = date => firstDay === lastDay ? width / 2 : 66 + (dayNumber(date) - firstDay) / (lastDay - firstDay) * (width - 100);
   const y = value => pad + (max - value) / (max - min) * (height - pad * 2);
-  return `${series.length === 1 ? '<p class="single-point-note">Первая точка есть. После следующего такого заплыва появится линия прогресса.</p>' : ''}
-    <div class="pace-chart"><svg viewBox="0 0 ${width} ${height + 30}" role="img" aria-label="Динамика темпа: ${series.map(w => `${dateLabel(w.date)}, ${formatCentiseconds(w.pace * 100)} на 100 метров`).join('; ')}">
+  // Keep calendar spacing, but omit crowded labels; every date remains in the tooltip/table.
+  const labels = new Set([0, series.length - 1]);
+  let previousLabelX = x(series[0].date);
+  series.forEach((w, i) => {
+    const position = x(w.date);
+    if (position - previousLabelX >= 90 && x(series.at(-1).date) - position >= 90) {
+      labels.add(i); previousLabelX = position;
+    }
+  });
+  return `${series.length === 1 ? '<p class="single-point-note">Первая точка есть. После такого заплыва в другой день появится линия прогресса.</p>' : ''}
+    <div class="pace-chart"><svg viewBox="0 0 ${width} ${height + 30}" role="group" aria-label="Динамика темпа: лучший результат за каждый тренировочный день">
     ${[min, (min + max) / 2, max].map(value => `<line x1="58" x2="${width - 20}" y1="${y(value)}" y2="${y(value)}" stroke="#e8ecec" stroke-dasharray="4 5"/><text x="0" y="${y(value) + 4}" fill="#6b7d86" font-size="12">${formatTime(value)}</text>`).join('')}
-    ${series.length > 1 ? `<polyline points="${series.map((w, i) => `${x(i)},${y(w.pace)}`).join(' ')}" fill="none" stroke="#667f91" stroke-width="3" stroke-linejoin="round"/>` : ''}
-    ${series.map((w, i) => `<circle cx="${x(i)}" cy="${y(w.pace)}" r="5" fill="${i === series.length - 1 ? '#D66A65' : '#667f91'}" stroke="#fff" stroke-width="2"><title>${dateLabel(w.date)}: ${formatCentiseconds(w.pace * 100)} / 100 м</title></circle>${series.length <= 8 || i === 0 || i === series.length - 1 ? `<text x="${x(i)}" y="${height + 14}" text-anchor="middle" fill="#6b7d86" font-size="12">${dateLabel(w.date, { day: 'numeric', month: 'short' })}</text>` : ''}`).join('')}
-    </svg></div><details class="chart-data"><summary>Все результаты на этой дистанции (${series.length})</summary><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Результат</th><th>Темп / 100 м</th></tr></thead><tbody>${series.map(w => `<tr><td>${dateLabel(w.date, { day: 'numeric', month: 'long', year: 'numeric' })}</td><td>${formatCentiseconds(w.timeCs)}</td><td>${formatCentiseconds(w.pace * 100)}</td></tr>`).join('')}</tbody></table></div></details>`;
+    ${series.length > 1 ? `<polyline points="${series.map(w => `${x(w.date)},${y(w.pace)}`).join(' ')}" fill="none" stroke="#667f91" stroke-width="3" stroke-linejoin="round"/>` : ''}
+    ${series.map((w, i) => {
+      const date = dateLabel(w.date, { day: 'numeric', month: 'long', year: 'numeric' });
+      const time = formatCentiseconds(w.timeCs);
+      const label = `${w.distance} м · ${STYLES[w.style]}${w.technique ? ' · ' + w.technique : ''}`;
+      return `<g class="pace-point${i === series.length - 1 ? ' latest' : ''}" tabindex="0" role="button" aria-label="${esc(`${date}: лучшее время ${time}, ${label}`)}" data-pace-date="${esc(date)}" data-pace-time="${time}" data-pace-label="${esc(label)}"><circle class="pace-hit" cx="${x(w.date)}" cy="${y(w.pace)}" r="20"/><circle class="pace-dot" cx="${x(w.date)}" cy="${y(w.pace)}" r="5" stroke-width="2"/></g>${labels.has(i) ? `<text x="${x(w.date)}" y="${height + 14}" text-anchor="middle" font-size="12">${dateLabel(w.date, { day: 'numeric', month: 'short' })}</text>` : ''}`;
+    }).join('')}
+    </svg><div id="pace-tooltip" class="pace-tooltip" role="tooltip" hidden></div></div><details class="chart-data"><summary>Лучшие результаты по дням (${series.length})</summary><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Результат</th><th>Темп / 100 м</th></tr></thead><tbody>${series.map(w => `<tr><td>${dateLabel(w.date, { day: 'numeric', month: 'long', year: 'numeric' })}</td><td>${formatCentiseconds(w.timeCs)}</td><td>${formatCentiseconds(w.pace * 100)}</td></tr>`).join('')}</tbody></table></div></details>`;
+}
+function hidePaceTooltip() {
+  const tooltip = document.querySelector('#pace-tooltip');
+  if (tooltip) tooltip.hidden = true;
+  document.querySelector('.pace-point[aria-describedby]')?.removeAttribute('aria-describedby');
+}
+function mountPaceTooltip() {
+  const tooltip = document.querySelector('#pace-tooltip');
+  if (!tooltip) return;
+  const show = point => {
+    hidePaceTooltip();
+    tooltip.innerHTML = `<span>${esc(point.dataset.paceDate)}</span><strong>${point.dataset.paceTime}</strong><span>Лучшее время · ${esc(point.dataset.paceLabel)}</span>`;
+    tooltip.hidden = false;
+    point.setAttribute('aria-describedby', tooltip.id);
+    const anchor = point.querySelector('.pace-dot').getBoundingClientRect();
+    const box = tooltip.getBoundingClientRect();
+    const left = Math.max(12, Math.min(anchor.left + anchor.width / 2 - box.width / 2, document.documentElement.clientWidth - box.width - 12));
+    const preferredTop = anchor.top >= box.height + 20 ? anchor.top - box.height - 10 : anchor.bottom + 10;
+    const top = Math.max(12, Math.min(preferredTop, document.documentElement.clientHeight - box.height - 12));
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+  };
+  for (const point of document.querySelectorAll('.pace-point')) {
+    point.addEventListener('pointerenter', event => { if (event.pointerType !== 'touch') show(point); });
+    point.addEventListener('pointerleave', event => {
+      if (document.activeElement !== point && !tooltip.contains(event.relatedTarget)) hidePaceTooltip();
+    });
+    point.addEventListener('focus', () => show(point));
+    point.addEventListener('blur', hidePaceTooltip);
+    point.addEventListener('click', () => show(point));
+    point.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); show(point); }
+      else if (event.key === 'Escape') { event.preventDefault(); hidePaceTooltip(); }
+    });
+  }
+  tooltip.addEventListener('pointerleave', () => {
+    if (!document.activeElement?.classList.contains('pace-point')) hidePaceTooltip();
+  });
 }
 function openModal(title, body, wide = false) {
   activeEditor?.dispose(); activeEditor = null;
@@ -401,6 +464,14 @@ function navigate() {
   view = target; render(); window.scrollTo({ top: 0, behavior: 'instant' });
 }
 window.addEventListener('hashchange', navigate);
+window.addEventListener('resize', hidePaceTooltip);
+document.addEventListener('scroll', event => {
+  if (!event.target.closest?.('.pace-tooltip')) hidePaceTooltip();
+}, true);
+document.addEventListener('pointerdown', event => {
+  if (!event.target.closest('.pace-point, .pace-tooltip')) hidePaceTooltip();
+});
+document.addEventListener('keydown', event => { if (event.key === 'Escape') hidePaceTooltip(); });
 document.addEventListener('click', event => {
   const target = event.target.closest('[data-action]');
   if (!target || target.disabled) return;
@@ -423,7 +494,10 @@ document.addEventListener('click', event => {
   else if (action === 'calendar-today') { calendarMonth = today.slice(0, 7); render(); }
 
   else if (action === 'reset-filters') { filterMonth = ''; filterSearch = ''; render(); }
-  else if (action === 'chart-period') { chartPeriod = target.dataset.value; render(); }
+  else if (action === 'stats-period') {
+    statsPeriod = target.dataset.value; render();
+    document.querySelector(`[data-action="stats-period"][data-value="${statsPeriod}"]`)?.focus();
+  }
   else if (action === 'settings') showSettings();
   else if (action === 'export') { download(backupJSON(workouts), `nyrok-${demo ? 'example-' : ''}${today}.json`); toast('Резервная копия подготовлена'); }
   else if (action === 'export-raw') {
