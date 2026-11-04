@@ -6,6 +6,8 @@ import {
 } from './domain.js';
 import { statisticsData, dailyPaceSeries, createRecordPreview } from './statistics.js';
 import { achievementsData, achievementHistory } from './achievements.js';
+import { monthSummaryPage, mountMonthSummary, resetSummaryMonth } from './monthly-page.js';
+import { summaryAnnouncementMonth } from './monthly-summary.js';
 import { readWorkouts, writeWorkouts, STORAGE_KEY } from './storage.js';
 import { editorHTML, mountEditor, newBlock } from './editor.js';
 import { resultDraft, resultOverview, repetitionSummary, resultsEditorHTML, mountResultsEditor, withExerciseResults, discardHTML, protectEditor } from './results-editor.js';
@@ -49,7 +51,7 @@ let workouts = [];
 let storageError = '';
 try { workouts = readWorkouts(localStorage); }
 catch { storageError = 'Не удалось прочитать сохранённый дневник. Исходные данные не изменены. Откройте «Данные» для восстановления.'; }
-let view = ['dashboard', 'diary', 'stats', 'achievements'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'dashboard';
+let view = ['dashboard', 'diary', 'stats', 'achievements', 'month'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'dashboard';
 let calendarMonth = today.slice(0, 7);
 let demo = false;
 let realWorkouts = [];
@@ -103,8 +105,8 @@ function statCard(label, value, unit, caption, symbol, accent = false) {
 }
 function render() {
   const stats = summary(workouts, today);
-  const titles = { dashboard: ['МОЁ ПРОСТРАНСТВО', 'Хороший день для воды'], diary: ['МОЯ ИСТОРИЯ', 'Дневник тренировок'], stats: ['МОЙ ПРОГРЕСС', 'Каждый заплыв имеет значение'], achievements: ['МОЙ ПРОГРЕСС', 'Личные достижения'] };
-  const activeNav = view === 'achievements' ? 'stats' : view;
+  const titles = { dashboard: ['МОЁ ПРОСТРАНСТВО', 'Хороший день для воды'], diary: ['МОЯ ИСТОРИЯ', 'Дневник тренировок'], stats: ['МОЙ ПРОГРЕСС', 'Каждый заплыв имеет значение'], achievements: ['МОЙ ПРОГРЕСС', 'Личные достижения'], month: ['МОЯ ИСТОРИЯ В ЦИФРАХ', 'Месяц в воде'] };
+  const activeNav = ['achievements', 'month'].includes(view) ? 'stats' : view;
   app.innerHTML = `
     <a class="skip-link" href="#main">К содержимому</a>
     <aside class="sidebar">
@@ -115,16 +117,17 @@ function render() {
       <div class="sidebar-note"><div class="small-waves">${icon('wave')}</div><p>Не быстрее других.<br>Ближе к себе.</p><span>Плывите в своём ритме</span></div>
       <div class="sidebar-bottom"><button class="nav-item" data-action="settings">${icon('settings')}<span>Данные и настройки</span></button><div class="local-label"><span class="status-dot"></span>Хранится на этом устройстве</div></div>
     </aside>
-    <main id="main" class="${view === 'dashboard' ? 'journal-page' : view === 'diary' ? 'diary-page' : view === 'achievements' ? 'stats-page achievements-page' : 'stats-page'}" tabindex="-1">
-      ${demo ? `<div class="demo-banner"><span>Вы смотрите пример. Эти записи не сохраняются в вашем дневнике.</span><button data-action="demo-off">Вернуться к моим данным ${icon('close')}</button></div>` : ''}
+    <main id="main" class="${view === 'dashboard' ? 'journal-page' : view === 'diary' ? 'diary-page' : view === 'achievements' ? 'stats-page achievements-page' : view === 'month' ? 'stats-page monthly-page' : 'stats-page'}" tabindex="-1">
+      ${demo ? `<div class="demo-banner"><span>${view === 'month' ? 'Итоги рассчитаны по вашему дневнику. Демонстрационные записи здесь не используются.' : 'Вы смотрите пример. Эти записи не сохраняются в вашем дневнике.'}</span><button data-action="demo-off">Вернуться к моим данным ${icon('close')}</button></div>` : ''}
       ${storageError ? `<div class="error-banner" role="alert">${esc(storageError)} <button data-action="settings">Открыть данные</button></div>` : ''}
-      ${view === 'achievements' ? `<a class="text-link achievements-back" href="#stats">${icon('left')}К статистике</a>` : ''}
-      ${view === 'dashboard' ? journalHeader() : `<header class="page-header"><div><p class="eyebrow">${titles[view][0]}</p><h1>${titles[view][1]}<span class="title-dot">.</span></h1><p class="header-date">${view === 'diary' ? 'Место для больших дистанций и маленьких побед.' : view === 'achievements' ? 'Ваши лучшие результаты за всю историю, по сегодняшний день.' : 'Замечайте изменения, наслаждайтесь процессом.'}</p></div><button class="button primary" data-action="add">${icon('plus')}<span>Добавить тренировку</span></button></header>`}
-      ${view === 'dashboard' ? dashboard(stats) : view === 'diary' ? diary() : view === 'achievements' ? achievements() : statistics()}
+      ${['achievements', 'month'].includes(view) ? `<a class="text-link achievements-back" href="#stats">${icon('left')}К статистике</a>` : ''}
+      ${view === 'dashboard' ? journalHeader() : `<header class="page-header"><div><p class="eyebrow">${titles[view][0]}</p><h1>${titles[view][1]}<span class="title-dot">.</span></h1><p class="header-date">${view === 'diary' ? 'Место для больших дистанций и маленьких побед.' : view === 'achievements' ? 'Ваши лучшие результаты за всю историю, по сегодняшний день.' : view === 'month' ? 'Соберите пройденный путь в одну историю.' : 'Замечайте изменения, наслаждайтесь процессом.'}</p></div>${view === 'month' ? '' : `<button class="button primary" data-action="add">${icon('plus')}<span>Добавить тренировку</span></button>`}</header>`}
+      ${view === 'dashboard' ? dashboard(stats) : view === 'diary' ? diary() : view === 'achievements' ? achievements() : view === 'month' ? monthSummaryPage(demo ? realWorkouts : workouts, Boolean(storageError)) : statistics()}
       <footer class="page-footer"><span>НЫРОК <span class="footer-dot">•</span> В своём ритме</span><span>${icon('shield')} Только вы и ваша история</span></footer>
     </main>
     <nav class="mobile-nav" aria-label="Мобильная навигация">${nav.map(([key, symbol, label]) => `<a href="#${key}" class="${activeNav === key ? 'active' : ''}" ${activeNav === key ? `aria-current="${view === key ? 'page' : 'location'}"` : ''}>${icon(symbol)}${label}</a>`).join('')}<button data-action="settings">${icon('settings')}Данные</button></nav>`;
   if (view === 'stats') mountPaceTooltip();
+  if (view === 'month') mountMonthSummary(app, { getWorkouts: () => demo ? realWorkouts : workouts, getStorageError: () => storageError, render, openModal, toast });
 }
 function journalHeader() {
   return `<header class="journal-header">
@@ -139,7 +142,9 @@ function journalHeader() {
 }
 function dashboard(stats) {
   const rhythm = regularityText(stats);
-  return `<section class="journal-month" aria-labelledby="month-heading">
+  const announcedMonth = storageError ? null : summaryAnnouncementMonth(demo ? realWorkouts : workouts);
+  return `${announcedMonth ? `<aside class="month-announcement" aria-labelledby="month-announcement-title"><div class="month-announcement-copy"><p class="journal-label">ВАША ИСТОРИЯ · ${monthLabel(announcedMonth).toLocaleUpperCase('ru-RU')}</p><h2 id="month-announcement-title">${dateLabel(`${announcedMonth}-01`, { month: 'long' })} в воде. Итоги готовы<span>.</span></h2><p>Вспомните свои дистанции и достижения</p></div><span class="month-announcement-wave" aria-hidden="true">${icon('wave')}</span><a href="#month" class="text-link">Посмотреть итоги ${icon('arrow')}</a></aside>` : ''}
+    <section class="journal-month" aria-labelledby="month-heading">
       <div class="journal-section-heading"><h2 id="month-heading">Этот месяц <span>/ ${dateLabel(`${today.slice(0, 7)}-01`, { month: 'long' })}</span></h2><a href="#stats" class="text-link">Вся статистика ${icon('arrow')}</a></div>
       <div class="journal-metrics">
         <div class="journal-distance"><span class="journal-label">Дистанция за месяц</span><div><strong>${number(stats.monthDistance / 1000)}</strong><span>км</span></div><p>Каждый метр имеет значение</p></div>
@@ -214,7 +219,7 @@ function statistics() {
   const daily = statsPeriod === 'week';
   const chartRange = daily ? 'Текущая неделя · будущие дни без данных'
     : statsPeriod === 'month' ? `${monthLabel(today.slice(0, 7))} · полные недели пн–вс` : '6 последних календарных месяцев';
-  return `<div class="stats-period"><div class="segmented" role="group" aria-label="Период статистики">${[['week', 'Неделя'], ['month', 'Месяц'], ['all', 'Всё время']].map(([key, label]) => `<button data-action="stats-period" data-value="${key}" class="${statsPeriod === key ? 'selected' : ''}" aria-pressed="${statsPeriod === key}">${label}</button>`).join('')}</div><p>По ${dateLabel(today, { day: 'numeric', month: 'long', year: 'numeric' })} включительно</p></div>
+  return `<div class="stats-period"><div class="segmented" role="group" aria-label="Период статистики">${[['week', 'Неделя'], ['month', 'Месяц'], ['all', 'Всё время']].map(([key, label]) => `<button data-action="stats-period" data-value="${key}" class="${statsPeriod === key ? 'selected' : ''}" aria-pressed="${statsPeriod === key}">${label}</button>`).join('')}</div><p>По ${dateLabel(today, { day: 'numeric', month: 'long', year: 'numeric' })} включительно</p><a href="#month" class="text-link month-summary-link">Месяц в воде ${icon('arrow')}</a></div>
     <section class="stats-overview" aria-label="Общие показатели за выбранный период">
     <article class="stats-distance"><h2>Вся дистанция</h2><div class="stats-distance-value">${number(stats.distance / 1000)}<span>км</span></div><p>${stats.unknownDistance ? `${stats.unknownDistance} ${plural(stats.unknownDistance, 'запись', 'записи', 'записей')} без дистанции` : 'Каждый известный метр'}</p></article>
     <div class="stats-facts">
@@ -530,9 +535,10 @@ function download(text, name) {
 }
 function navigate() {
   const target = location.hash.slice(1);
-  if (!['dashboard', 'diary', 'stats', 'achievements'].includes(target)) return;
+  if (!['dashboard', 'diary', 'stats', 'achievements', 'month'].includes(target)) return;
   if (!closeModal()) { history.replaceState(null, '', `#${view}`); return; }
   if (target === 'stats' && view !== 'stats') recordPreview = null;
+  if (target === 'month' && view !== 'month') resetSummaryMonth();
   view = target; render(); window.scrollTo({ top: 0, behavior: 'instant' });
 }
 window.addEventListener('hashchange', navigate);
