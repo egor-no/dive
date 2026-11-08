@@ -73,17 +73,52 @@ Record individual results for each round or save only your best time. Workouts c
 
 ![Workout Builder](docs/screenshots/training-edit.JPG)
 
-### 📊 Statistics & Personal Records
+### 📊 Swimming Statistics
 
-Explore your swimming progress through workout frequency, distance and pace charts.
+Explore your swimming progress through workout frequency, total distance, average distance per session and pace charts.
 
-Switch between weekly, monthly and all-time statistics. Track your best results for specific distances, swimming styles and techniques.
+Switch between weekly, monthly and all-time statistics.
 
-The pace chart uses the best recorded time for each training day, making it easier to follow progress over time.
+Workout frequency and swimming distance are visualized by calendar days, weeks or months depending on the selected period.
+
+The pace chart tracks the best recorded result for each day, with calendar-accurate spacing between measurements.
 
 ![Swimming Statistics](docs/screenshots/stats-general.JPG)
 
-![Swimming Statistics](docs/screenshots/stats-results.JPG)
+### 🏆 Personal Achievements
+
+Nyrok keeps track of personal bests for individual swimming distances, styles and technique variations.
+
+The dedicated achievements page includes **18 standard swimming disciplines** for a 25-meter pool, covering freestyle, breaststroke, backstroke, butterfly and individual medley.
+
+Each discipline displays your best recorded time, pace per 100 meters and the date of the achievement.
+
+Disciplines without a recorded result remain visible as personal challenges, encouraging you to try something new.
+
+Non-standard distances and technique variations are displayed separately, so every personal achievement has its place.
+
+![Personal Achievements](docs/screenshots/achievements.JPG)
+
+### 📈 Personal Record History
+
+Every personal record has its own history, accessible through a dedicated icon on the achievements page.
+
+The history opens in a modal window and shows:
+
+- First recorded result and date
+- Current personal best and date
+- Total improvement since the first result
+- Chronological timeline of personal best improvements
+- Exact time gained with each new record
+- Links to the original workouts
+- Pace chart containing all recorded swimming days
+
+The timeline highlights only genuine improvements, while the chart includes all daily best results — even when no new record was achieved.
+
+This makes it possible to follow not just your fastest swim, but the entire journey towards it.
+
+![Personal Record History](docs/screenshots/record-history.JPG)
+
 ---
 
 ## 🎨 Interface

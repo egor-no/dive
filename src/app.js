@@ -85,7 +85,7 @@ function emptyState(title, text, action = 'add', label = 'Добавить тр�
 function regularityText(stats) {
   // summary uses unique local calendar dates and excludes future visits.
   if (stats.lastDate === today) return {
-    title: 'Сегодня вы уже были в воде',
+    title: 'Сегодня вы уже были на воде',
     text: stats.average === null
       ? 'Начало положено. После второго дня в бассейне мы рассчитаем ваш привычный интервал.'
       : `В среднем вы возвращаетесь в бассейн каждые ${number(stats.average)} дн. Продолжайте так, как комфортно вам.`,
@@ -103,7 +103,7 @@ function statCard(label, value, unit, caption, symbol, accent = false) {
 }
 function render() {
   const stats = summary(workouts, today);
-  const titles = { dashboard: ['МОЁ ПРОСТРАНСТВО', 'Хороший день для воды'], diary: ['МОЯ ИСТОРИЯ', 'Дневник тренировок'], stats: ['МОЙ ПРОГРЕСС', 'Каждый заплыв имеет значение'], achievements: ['МОЯ КОЛЛЕКЦИЯ', 'Личные достижения'] };
+  const titles = { dashboard: ['МОЁ ПРОСТРАНСТВО', 'Хороший день для воды'], diary: ['МОЯ ИСТОРИЯ', 'Дневник тренировок'], stats: ['МОЙ ПРОГРЕСС', 'Каждый заплыв имеет значение'], achievements: ['МОЙ ПРОГРЕСС', 'Личные достижения'] };
   const activeNav = view === 'achievements' ? 'stats' : view;
   app.innerHTML = `
     <a class="skip-link" href="#main">К содержимому</a>
@@ -251,11 +251,11 @@ function achievements() {
     otherGroups.get(record.distance).disciplines.push({ style: record.style, record });
   }
   return `<section class="achievements-standard" aria-labelledby="standard-achievements">
-    <div class="panel-heading"><div><p class="eyebrow">ДИСТАНЦИИ ДЛЯ СЕБЯ</p><h2 id="standard-achievements">Стандартные дисциплины</h2></div></div>
+    <div class="panel-heading"><div><p class="eyebrow">КЛАССИКА ЖАНРА</p><h2 id="standard-achievements">Стандартные дисциплины</h2></div></div>
     <p class="achievements-description">25-метровый бассейн · дистанция и стиль без дополнительного уточнения техники. Каждая непройденная дистанция — приглашение попробовать.</p>
     ${standard.map(group => achievementGroup(group)).join('')}
     </section>
-    <section class="achievements-other" aria-labelledby="other-achievements"><div class="panel-heading"><div><p class="eyebrow">ВАШ СОБСТВЕННЫЙ МАРШРУТ</p><h2 id="other-achievements">Другие достижения</h2></div></div><p class="achievements-description">Другие дистанции, стили и заплывы с уточнением техники.</p>
+    <section class="achievements-other" aria-labelledby="other-achievements"><div class="panel-heading"><div><p class="eyebrow">МОЙ СОБСТВЕННЫЙ МАРШРУТ</p><h2 id="other-achievements">Другие достижения</h2></div></div><p class="achievements-description">Другие дистанции, стили и заплывы с уточнением техники.</p>
     ${other.length ? [...otherGroups.values()].map(group => achievementGroup(group, 'other-achievement-distance')).join('') : '<p class="records-empty">Здесь появятся ваши рекорды на других дистанциях и в отдельных техниках.</p>'}</section>`;
 }
 function showAchievementHistory(key) {
@@ -425,7 +425,7 @@ function exerciseList(w, comparisons = false) {
       const delta = previous ? r.timeCs - previous.timeCs : null;
       return `<li>${r.round === null ? 'Круг неизвестен' : `Круг ${r.round}`} · ${formatCentiseconds(r.timeCs)}${previous ? `<p>${delta < 0 ? 'Быстрее' : delta > 0 ? 'Дольше' : 'Без изменения'}${delta ? ' на ' + formatCentiseconds(Math.abs(delta)) : ''}. Предыдущий: ${formatCentiseconds(previous.timeCs)}.</p>` : ''}</li>`;
     }).join('') : '';
-    return `<div class="diary-exercise"><button class="exercise-quick-button" data-action="quick-results" data-id="${esc(w.id)}" data-exercise-id="${esc(e.id)}" aria-label="Времена: ${e.distance} м ${STYLES[e.style]}${e.technique ? ' ' + esc(e.technique) : ''}${timeLabel ? ', ' + esc(timeLabel) : ''}"><span class="exercise-quick-info"><strong>${e.distance} м · ${STYLES[e.style]}${e.technique ? ' · ' + esc(e.technique) : ''}</strong>${e.description ? `<span class="exercise-description-caption">${esc(e.description)}</span>` : ''}${countLabel ? `<small>${esc(countLabel)}</small>` : ''}</span><span class="exercise-quick-time" ${overview.best === null ? '' : 'title="Лучшее время в этом упражнении"'}>${best ? `<span class="record-marker" aria-label="Личный рекорд">${icon('trophy')}</span>` : ''}${timeLabel ? `<span>${esc(timeLabel)}</span>` : ''}${icon('clock')}</span></button>
+    return `<div class="diary-exercise"><button class="exercise-quick-button" data-action="quick-results" data-id="${esc(w.id)}" data-exercise-id="${esc(e.id)}" aria-label="Время: ${e.distance} м ${STYLES[e.style]}${e.technique ? ' ' + esc(e.technique) : ''}${timeLabel ? ', ' + esc(timeLabel) : ''}"><span class="exercise-quick-info"><strong>${e.distance} м · ${STYLES[e.style]}${e.technique ? ' · ' + esc(e.technique) : ''}</strong>${e.description ? `<span class="exercise-description-caption">${esc(e.description)}</span>` : ''}${countLabel ? `<small>${esc(countLabel)}</small>` : ''}</span><span class="exercise-quick-time" ${overview.best === null ? '' : 'title="Лучшее время в этом упражнении"'}>${best ? `<span class="record-marker" aria-label="Личный рекорд">${icon('trophy')}</span>` : ''}${timeLabel ? `<span>${esc(timeLabel)}</span>` : ''}${icon('clock')}</span></button>
       ${comparisons && (history || e.plannedTimeCs || e.restAfterCs || e.legacy?.durationCs) ? `<details class="exercise-extra"><summary>Подробности</summary>${e.plannedTimeCs ? `<p>План: ${formatCentiseconds(e.plannedTimeCs)}</p>` : ''}${e.restAfterCs ? `<p>Отдых после упражнения: ${formatCentiseconds(e.restAfterCs)} (кроме последнего в круге)</p>` : ''}${e.legacy?.durationCs ? `<p>Старая продолжительность: ${formatCentiseconds(e.legacy.durationCs)}</p>` : ''}${history ? `<ul class="exercise-list">${history}</ul>` : ''}</details>` : ''}</div>`;
   }).join('')}</div>${comparisons && (b.restBetweenCs || b.restAfterCs) ? `<details class="exercise-extra"><summary>Отдых в блоке</summary>${b.rounds > 1 && b.restBetweenCs ? `<p>Между кругами: ${formatCentiseconds(b.restBetweenCs)}</p>` : ''}${b.restAfterCs ? `<p>После блока: ${formatCentiseconds(b.restAfterCs)}</p>` : ''}</details>` : ''}</section>`).join('');
 }

@@ -37,7 +37,7 @@ export function withExerciseResults(workout, exerciseId, draft, createId) {
   return { ...workout, blocks };
 }
 export function resultsEditorHTML(exercise, rounds, open = false) {
-  return `<details class="inline-results" data-single="${rounds === 1}" ${open || rounds === 1 ? 'open' : ''}><summary>Времена <span class="result-count">${esc(resultOverview(resultDraft(exercise), rounds).label)}</span></summary><div class="results-body">
+  return `<details class="inline-results" data-single="${rounds === 1}" ${open || rounds === 1 ? 'open' : ''}><summary>Время <span class="result-count">${esc(resultOverview(resultDraft(exercise), rounds).label)}</span></summary><div class="results-body">
     <label class="result-mode-label" ${rounds === 1 ? 'hidden' : ''}>Записать <select name="result-mode"><option value="rounds" ${exercise.resultMode === 'rounds' ? 'selected' : ''}>По кругам</option><option value="best" ${exercise.resultMode === 'best' ? 'selected' : ''}>Только лучший</option></select></label>
     <div class="result-grid"></div><div class="result-pages" hidden><button type="button" class="icon-button" data-results-page="prev" aria-label="Предыдущие круги">←</button><span></span><button type="button" class="icon-button" data-results-page="next" aria-label="Следующие круги">→</button></div>
     <p class="result-hint">Неизвестное время оставьте пустым. Например: 49.82 или 1:48.37.</p></div></details>`;
