@@ -5,7 +5,7 @@ import {
   exercisesOf, blockDistance, formatCentiseconds, timedResults, copyWorkout, templateWorkouts,
 } from './domain.js';
 import { statisticsData, dailyPaceSeries, createRecordPreview } from './statistics.js';
-import { achievementsData } from './achievements.js';
+import { achievementsData, achievementHistory } from './achievements.js';
 import { readWorkouts, writeWorkouts, STORAGE_KEY } from './storage.js';
 import { editorHTML, mountEditor, newBlock } from './editor.js';
 import { resultDraft, resultOverview, resultsEditorHTML, mountResultsEditor, withExerciseResults, discardHTML, protectEditor } from './results-editor.js';
@@ -21,6 +21,7 @@ const icons = {
   right: '<path d="m10 6 6 6-6 6"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4M17 3v4M3 11h18M8 15h2M14 15h2"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  history: '<path d="M3 10a9 9 0 1 1 1 8M3 4v6h6M12 7v5l3 2"/>',
   drop: '<path d="M12 3C9 7 5 11 5 15a7 7 0 0 0 14 0c0-4-4-8-7-12Z"/><path d="M9 15a3 3 0 0 0 3 3"/>',
   rhythm: '<path d="M2 12h4l3-6 5 12 3-6h5"/>',
   trophy: '<path d="M8 3h8v7a4 4 0 0 1-8 0ZM8 5H4v3a4 4 0 0 0 4 4M16 5h4v3a4 4 0 0 1-4 4M12 14v5M8 21h8M10 19h4"/>',
@@ -227,28 +228,60 @@ function statistics() {
     <article class="panel pace-panel"><div class="panel-heading"><div><p class="eyebrow">ЗАПЛЫВЫ НА ВРЕМЯ</p><h2>Как меняется ваш темп</h2></div>${records.length ? `<select id="pace-selection" aria-label="Дистанция, стиль и техника для графика темпа">${records.map(w => `<option value="${esc(recordKey(w))}" ${recordKey(w) === selectedPace ? 'selected' : ''}>${w.distance} м · ${STYLES[w.style]}${w.technique ? ' · ' + esc(w.technique) : ''}</option>`).join('')}</select>` : ''}</div><p class="chart-description">Темп на 100 м · лучший результат каждого дня за выбранный период. Дистанции, стили и техники учитываются отдельно. Нажмите на точку, чтобы увидеть время.</p>${records.length ? paceChart(dailyPaceSeries(selected, selectedPace)) : emptyState('В этом периоде пока нет результатов', 'Выберите другой период или запишите время заплыва. Результаты сравниваются на одинаковой дистанции, в одном стиле и с одинаковым уточнением техники.', 'add-timed', 'Записать результат', 'chart')}</article>
     <article class="panel records-panel"><div class="panel-heading"><div><p class="eyebrow">ЛИЧНЫЕ ДОСТИЖЕНИЯ</p><h2>Ваши лучшие заплывы</h2></div><span class="record-badge">${icon('trophy')} Маленькие победы</span></div>${records.length ? `<div class="table-wrap"><table><thead><tr><th>Дистанция и стиль</th><th>Результат</th><th>Темп / 100 м</th><th>Дата</th><th><span class="sr-only">Подробнее</span></th></tr></thead><tbody>${previewRecords.map(w => `<tr><td><strong>${w.distance} м</strong><span class="table-style">${STYLES[w.style]}${w.technique ? ' · ' + esc(w.technique) : ''}</span></td><td class="best-time">${formatCentiseconds(w.timeCs)}</td><td>${formatCentiseconds(pace(w) * 100)}</td><td>${dateLabel(w.date, { day: 'numeric', month: 'short', year: 'numeric' })}</td><td><button class="icon-button" data-action="detail" data-id="${esc(w.id)}" aria-label="Открыть рекорд ${w.distance} м ${STYLES[w.style]}">${icon('arrow')}</button></td></tr>`).join('')}</tbody></table></div>` : `<p class="records-empty">Здесь появятся лучшие результаты для каждой дистанции и стиля. Соревнуйтесь только с собой — и только если хочется.</p>`}<div class="records-footer"><a href="#achievements" class="text-link">Все достижения ${icon('arrow')}</a></div></article>`;
 }
-function achievementRow(distance, style, record, showDistance = false) {
+function achievementRow(distance, style, record) {
   const label = `${distance} м · ${STYLES[style]}${record?.technique ? ' · ' + record.technique : ''}`;
   return `<li class="achievement-row ${record ? 'has-record' : 'not-yet'}">
-    <div class="achievement-discipline"><strong>${showDistance ? `${number(distance)} м · ` : ''}${STYLES[style]}</strong>${record?.technique ? `<span>${esc(record.technique)}</span>` : ''}</div>
+    <div class="achievement-discipline"><strong>${STYLES[style]}</strong>${record?.technique ? `<span>${esc(record.technique)}</span>` : ''}</div>
     ${record ? `<dl class="achievement-values">
       <div><dt>Лучшее время</dt><dd class="achievement-time">${formatCentiseconds(record.timeCs)}</dd></div>
       <div><dt>Темп / 100 м</dt><dd>${formatCentiseconds(pace(record) * 100)}</dd></div>
       <div><dt>Дата</dt><dd class="achievement-date">${dateLabel(record.date, { day: 'numeric', month: 'short', year: 'numeric' })}</dd></div>
-    </dl><button class="icon-button achievement-open" data-action="detail" data-id="${esc(record.id)}" aria-label="Открыть тренировку: ${esc(label)}">${icon('arrow')}</button>` : '<p class="achievement-pending">Ещё не проплыто</p>'}
+    </dl><div class="achievement-actions"><button class="icon-button achievement-open achievement-history-button" data-action="achievement-history" data-record-key="${esc(recordKey(record))}" title="История достижения" aria-label="История достижения: ${esc(label)}">${icon('history')}</button><button class="icon-button achievement-open" data-action="detail" data-id="${esc(record.id)}" title="Открыть тренировку" aria-label="Открыть тренировку: ${esc(label)}">${icon('arrow')}</button></div>` : '<p class="achievement-pending">Ещё не проплыто</p>'}
   </li>`;
+}
+function achievementGroup(group, idPrefix = 'achievement-distance') {
+  const headingId = `${idPrefix}-${group.distance}`;
+  return `<section class="achievement-group" aria-labelledby="${headingId}"><h3 id="${headingId}" class="achievement-distance">${number(group.distance)} <span>м</span></h3><ul class="achievement-list">${group.disciplines.map(({ style, record }) => achievementRow(group.distance, style, record)).join('')}</ul></section>`;
 }
 function achievements() {
   const { standard, other } = achievementsData(workouts, today);
+  const otherGroups = new Map();
+  for (const record of other) {
+    if (!otherGroups.has(record.distance)) otherGroups.set(record.distance, { distance: record.distance, disciplines: [] });
+    otherGroups.get(record.distance).disciplines.push({ style: record.style, record });
+  }
   return `<section class="achievements-standard" aria-labelledby="standard-achievements">
     <div class="panel-heading"><div><p class="eyebrow">ДИСТАНЦИИ ДЛЯ СЕБЯ</p><h2 id="standard-achievements">Стандартные дисциплины</h2></div></div>
     <p class="achievements-description">25-метровый бассейн · дистанция и стиль без дополнительного уточнения техники. Каждая непройденная дистанция — приглашение попробовать.</p>
-    ${standard.map(group => `<section class="achievement-group" aria-labelledby="achievement-distance-${group.distance}"><h3 id="achievement-distance-${group.distance}" class="achievement-distance">${number(group.distance)} <span>м</span></h3><ul class="achievement-list">${group.disciplines.map(({ style, record }) => achievementRow(group.distance, style, record)).join('')}</ul></section>`).join('')}
+    ${standard.map(group => achievementGroup(group)).join('')}
     </section>
     <section class="achievements-other" aria-labelledby="other-achievements"><div class="panel-heading"><div><p class="eyebrow">ВАШ СОБСТВЕННЫЙ МАРШРУТ</p><h2 id="other-achievements">Другие достижения</h2></div></div><p class="achievements-description">Другие дистанции, стили и заплывы с уточнением техники.</p>
-    ${other.length ? `<ul class="achievement-list">${other.map(record => achievementRow(record.distance, record.style, record, true)).join('')}</ul>` : '<p class="records-empty">Здесь появятся ваши рекорды на других дистанциях и в отдельных техниках.</p>'}</section>`;
+    ${other.length ? [...otherGroups.values()].map(group => achievementGroup(group, 'other-achievement-distance')).join('') : '<p class="records-empty">Здесь появятся ваши рекорды на других дистанциях и в отдельных техниках.</p>'}</section>`;
 }
-function paceChart(series) {
+function showAchievementHistory(key) {
+  const history = achievementHistory(workouts, key, today);
+  if (!history.first) return toast('Для этой дисциплины пока нет результатов.');
+  const { first, best, improvementCs, events, daily } = history;
+  const label = `${best.distance} м · ${STYLES[best.style]}${best.technique ? ' · ' + best.technique : ''}`;
+  const date = value => dateLabel(value, { day: 'numeric', month: 'long', year: 'numeric' });
+  const seconds = value => `${Math.floor(value / 100)},${String(value % 100).padStart(2, '0')}`;
+  openModal('История достижения', `<div class="achievement-history-content">
+    <p class="modal-subtitle">${esc(label)}</p>
+    <dl class="history-summary">
+      <div><dt>Первый результат</dt><dd><strong>${formatCentiseconds(first.timeCs)}</strong><time datetime="${first.date}">${date(first.date)}</time></dd></div>
+      <div><dt>Текущий рекорд</dt><dd><strong>${formatCentiseconds(best.timeCs)}</strong><time datetime="${best.date}">${date(best.date)}</time></dd></div>
+      <div><dt>Улучшение с первого результата</dt><dd><strong>${seconds(improvementCs)} <small>с</small></strong></dd></div>
+    </dl>
+    <section class="history-section" aria-labelledby="history-timeline-heading"><h3 id="history-timeline-heading">Путь к рекорду</h3>
+      <ol class="history-timeline">${events.map(event => `<li><div><time datetime="${event.date}">${date(event.date)}</time><div class="history-event-result"><strong>${formatCentiseconds(event.timeCs)}</strong><span>${event.improvementCs === null ? 'Первый результат' : `Быстрее на ${seconds(event.improvementCs)} с`}</span></div></div><button class="icon-button" data-action="history-workout" data-id="${esc(event.id)}" title="Открыть тренировку" aria-label="Открыть тренировку ${date(event.date)}, результат ${formatCentiseconds(event.timeCs)}">${icon('arrow')}</button></li>`).join('')}</ol>
+    </section>
+    <section class="history-section" aria-labelledby="history-swims-heading"><h3 id="history-swims-heading">Все заплывы</h3><p class="chart-description">Темп на 100 м · лучший результат каждого дня за всю историю, включая дни без улучшения рекорда. Нажмите на точку, чтобы увидеть время.</p>${paceChart(daily, 'achievement-history-tooltip')}</section>
+  </div>`, true);
+  const dialog = modalRoot.querySelector('dialog');
+  dialog.classList.add('history-modal');
+  mountPaceTooltip(dialog);
+}
+function paceChart(series, tooltipId = 'pace-tooltip') {
   if (!series.length) return '<p class="records-empty">В этом периоде пока нет результатов.</p>';
   const width = 820, height = 190, pad = 35;
   const min = Math.max(0, Math.floor(Math.min(...series.map(w => w.pace)) / 10) * 10 - 10);
@@ -275,15 +308,14 @@ function paceChart(series) {
       const label = `${w.distance} м · ${STYLES[w.style]}${w.technique ? ' · ' + w.technique : ''}`;
       return `<g class="pace-point${i === series.length - 1 ? ' latest' : ''}" tabindex="0" role="button" aria-label="${esc(`${date}: лучшее время ${time}, ${label}`)}" data-pace-date="${esc(date)}" data-pace-time="${time}" data-pace-label="${esc(label)}"><circle class="pace-hit" cx="${x(w.date)}" cy="${y(w.pace)}" r="20"/><circle class="pace-dot" cx="${x(w.date)}" cy="${y(w.pace)}" r="5" stroke-width="2"/></g>${labels.has(i) ? `<text x="${x(w.date)}" y="${height + 14}" text-anchor="middle" font-size="12">${dateLabel(w.date, { day: 'numeric', month: 'short' })}</text>` : ''}`;
     }).join('')}
-    </svg><div id="pace-tooltip" class="pace-tooltip" role="tooltip" hidden></div></div><details class="chart-data"><summary>Лучшие результаты по дням (${series.length})</summary><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Результат</th><th>Темп / 100 м</th></tr></thead><tbody>${series.map(w => `<tr><td>${dateLabel(w.date, { day: 'numeric', month: 'long', year: 'numeric' })}</td><td>${formatCentiseconds(w.timeCs)}</td><td>${formatCentiseconds(w.pace * 100)}</td></tr>`).join('')}</tbody></table></div></details>`;
+    </svg><div id="${tooltipId}" class="pace-tooltip" role="tooltip" hidden></div></div><details class="chart-data"><summary>Лучшие результаты по дням (${series.length})</summary><div class="table-wrap"><table><thead><tr><th>Дата</th><th>Результат</th><th>Темп / 100 м</th></tr></thead><tbody>${series.map(w => `<tr><td>${dateLabel(w.date, { day: 'numeric', month: 'long', year: 'numeric' })}</td><td>${formatCentiseconds(w.timeCs)}</td><td>${formatCentiseconds(w.pace * 100)}</td></tr>`).join('')}</tbody></table></div></details>`;
 }
 function hidePaceTooltip() {
-  const tooltip = document.querySelector('#pace-tooltip');
-  if (tooltip) tooltip.hidden = true;
-  document.querySelector('.pace-point[aria-describedby]')?.removeAttribute('aria-describedby');
+  document.querySelectorAll('.pace-tooltip').forEach(tooltip => { tooltip.hidden = true; });
+  document.querySelectorAll('.pace-point[aria-describedby]').forEach(point => point.removeAttribute('aria-describedby'));
 }
-function mountPaceTooltip() {
-  const tooltip = document.querySelector('#pace-tooltip');
+function mountPaceTooltip(root = app) {
+  const tooltip = root.querySelector('.pace-tooltip');
   if (!tooltip) return;
   const show = point => {
     hidePaceTooltip();
@@ -298,7 +330,7 @@ function mountPaceTooltip() {
     tooltip.style.left = `${left}px`;
     tooltip.style.top = `${top}px`;
   };
-  for (const point of document.querySelectorAll('.pace-point')) {
+  for (const point of root.querySelectorAll('.pace-point')) {
     point.addEventListener('pointerenter', event => { if (event.pointerType !== 'touch') show(point); });
     point.addEventListener('pointerleave', event => {
       if (document.activeElement !== point && !tooltip.contains(event.relatedTarget)) hidePaceTooltip();
@@ -308,7 +340,10 @@ function mountPaceTooltip() {
     point.addEventListener('click', () => show(point));
     point.addEventListener('keydown', event => {
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); show(point); }
-      else if (event.key === 'Escape') { event.preventDefault(); hidePaceTooltip(); }
+      else if (event.key === 'Escape') {
+        if (!point.closest('dialog')) event.preventDefault();
+        hidePaceTooltip();
+      }
     });
   }
   tooltip.addEventListener('pointerleave', () => {
@@ -316,6 +351,7 @@ function mountPaceTooltip() {
   });
 }
 function openModal(title, body, wide = false) {
+  hidePaceTooltip();
   activeEditor?.dispose(); activeEditor = null;
   lastFocus = document.activeElement;
   modalRoot.innerHTML = `<dialog class="modal ${wide ? 'wide' : ''}" aria-labelledby="modal-title"><div class="modal-heading"><h2 id="modal-title">${title}</h2><button class="icon-button" data-action="close-modal" aria-label="Закрыть окно">${icon('close')}</button></div>${body}</dialog>`;
@@ -326,6 +362,7 @@ function openModal(title, body, wide = false) {
 }
 function closeModal(force = false) {
   if (!force && activeEditor && !activeEditor.canClose()) return false;
+  hidePaceTooltip();
   activeEditor?.dispose(); activeEditor = null;
   modalRoot.querySelector('dialog')?.close();
   modalRoot.innerHTML = '';
@@ -514,6 +551,8 @@ document.addEventListener('click', event => {
   }
   else if (action === 'close-modal') closeModal();
   else if (action === 'detail') showDetail(id);
+  else if (action === 'achievement-history') showAchievementHistory(target.dataset.recordKey);
+  else if (action === 'history-workout') { if (closeModal()) showDetail(id); }
   else if (action === 'quick-results') showQuickResults(id, target.dataset.exerciseId);
   else if (action === 'edit') { const w = workouts.find(item => item.id === id); if (w) showForm(w); }
   else if (action === 'delete') confirmDelete(id);
