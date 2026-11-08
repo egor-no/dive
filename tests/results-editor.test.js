@@ -1,13 +1,44 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resultDraft, resultPage, hasResultsBeyond, resizeDraft, readResultDraft, resultOverview, withExerciseResults, resultsEditorHTML } from '../src/results-editor.js';
+import { resultDraft, resultPage, hasResultsBeyond, resizeDraft, readResultDraft, resultOverview, repetitionSummary, withExerciseResults, resultsEditorHTML } from '../src/results-editor.js';
 import { editorHTML, newBlock } from '../src/editor.js';
-import { validateWorkout, personalBests, totalDistance, summary } from '../src/domain.js';
+import { validateWorkout, personalBests, totalDistance, summary, formatCentiseconds } from '../src/domain.js';
 import { readWorkouts, writeWorkouts } from '../src/storage.js';
 
 const TODAY = '2026-10-21';
 const exercise = (extra = {}) => ({ id: 'exercise', distance: 50, style: 'freestyle', description: '', technique: '', plannedTimeCs: null, restAfterCs: null, resultMode: 'rounds', results: [{ id: 'r1', round: 1, timeCs: 4852 }, { id: 'r3', round: 3, timeCs: 4789 }], ...extra });
 const workout = (extra = {}) => ({ id: 'workout', date: '2026-10-01', title: 'Техника', status: 'COMPLETED', distance: null, durationCs: 180000, comment: 'Хорошо', style: '', createdAt: '2026-10-01T08:00:00Z', blocks: [{ id: 'block', title: 'Скорость', rounds: 4, restBetweenCs: 3000, restAfterCs: 6000, exercises: [exercise(), exercise({ id: 'other', distance: 100, results: [] })] }], ...extra });
+
+test('repetition summary is absent for fewer than two filled times or best-only mode', () => {
+  assert.equal(repetitionSummary(exercise({ results: [] })), null);
+  assert.equal(repetitionSummary(exercise({ results: [{ timeCs: 5000 }, { timeCs: null }, {}] })), null);
+  assert.equal(repetitionSummary(exercise({ resultMode: 'best' })), null);
+});
+
+test('repetition summary keeps exact centiseconds and ignores unfilled rounds, plans and rest', () => {
+  const e = exercise({ plannedTimeCs: 2000, restAfterCs: 6000, legacy: { durationCs: 90000 },
+    results: [{ id: 'a', round: 1, timeCs: 10001 }, { id: 'b', round: 4, timeCs: 10000 }] });
+  const before = structuredClone(e);
+  const values = repetitionSummary(e);
+  assert.deepEqual(values, { count: 2, totalCs: 20001, bestCs: 10000, worstCs: 10001, spreadCs: 1 });
+  assert.equal(values.totalCs / values.count, 10000.5);
+  assert.equal(formatCentiseconds(values.totalCs / values.count), '1:40.01');
+  assert.deepEqual(e, before);
+  assert.deepEqual(repetitionSummary(exercise({ results: [{ timeCs: 7777 }, { timeCs: 7777 }] })),
+    { count: 2, totalCs: 15554, bestCs: 7777, worstCs: 7777, spreadCs: 0 });
+});
+
+test('repetition summary recalculates after quick-result edits and disappears after clearing a time', () => {
+  const original = workout();
+  const draft = resultDraft(original.blocks[0].exercises[0]);
+  draft.entries[0].value = '50.00';
+  const updated = withExerciseResults(original, 'exercise', draft);
+  assert.deepEqual(repetitionSummary(updated.blocks[0].exercises[0]),
+    { count: 2, totalCs: 9789, bestCs: 4789, worstCs: 5000, spreadCs: 211 });
+  assert.equal(repetitionSummary(original.blocks[0].exercises[0]).worstCs, 4852);
+  draft.entries[1].value = '';
+  assert.equal(repetitionSummary(withExerciseResults(updated, 'exercise', draft).blocks[0].exercises[0]), null);
+});
 
 test('four rounds produce exactly four fixed positions with optional gaps', () => {
   assert.deepEqual(resultPage(resultDraft(exercise()), 4).slots, [

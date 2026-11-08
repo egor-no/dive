@@ -342,6 +342,12 @@ button:focus-visible,a:focus-visible,summary:focus-visible { outline-color:var(-
 :is(.diary-page,.modal:has(>.detail-grid)) .exercise-quick-time { min-width:38px; min-height:28px; font-size:14px; font-weight:600; color:var(--ink); }
 :is(.diary-page,.modal:has(>.detail-grid)) .exercise-quick-time>.icon { width:19px; height:19px; color:var(--slate); }
 :is(.diary-page,.modal:has(>.detail-grid)) .record-marker { color:var(--coral); }
+.diary-page .repetition-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:0 7px 6px; padding-top:6px; border-top:1px solid var(--line); }
+.repetition-summary dt { font-size:10px; line-height:1.6; color:var(--slate); }
+.repetition-summary dd { margin:2px 0 0; color:var(--ink); font-size:15px; font-weight:600; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+@media(max-width:760px) {
+  .diary-page .repetition-summary { grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 16px; margin-left:3px; margin-right:3px; }
+}
 .modal:has(>.detail-grid) .exercise-extra { padding:4px 7px 11px; font-size:11px; color:var(--slate); }
 .modal:has(>.detail-grid) .exercise-extra summary { min-height:32px; padding:5px 0; }
 .modal:has(>.detail-grid) .exercise-extra .exercise-list { margin:7px 0 0; padding-left:20px; }

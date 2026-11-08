@@ -8,7 +8,7 @@ import { statisticsData, dailyPaceSeries, createRecordPreview } from './statisti
 import { achievementsData, achievementHistory } from './achievements.js';
 import { readWorkouts, writeWorkouts, STORAGE_KEY } from './storage.js';
 import { editorHTML, mountEditor, newBlock } from './editor.js';
-import { resultDraft, resultOverview, resultsEditorHTML, mountResultsEditor, withExerciseResults, discardHTML, protectEditor } from './results-editor.js';
+import { resultDraft, resultOverview, repetitionSummary, resultsEditorHTML, mountResultsEditor, withExerciseResults, discardHTML, protectEditor } from './results-editor.js';
 
 const icons = {
   wave: '<path d="M2 9q5-5 10 0t10 0M2 16q5-5 10 0t10 0"/>',
@@ -416,16 +416,23 @@ function exerciseList(w, comparisons = false) {
   const swims = comparisons ? timedResults([w]) : [];
   return w.blocks.map(b => `<section class="program-block compact-program"><h3>${esc(b.title)} · ${b.rounds} ${plural(b.rounds, 'круг', 'круга', 'кругов')} · ${blockDistance(b)} м</h3><div class="diary-exercises">${b.exercises.map(e => {
     const overview = resultOverview(resultDraft(e), b.rounds);
+    const repetitions = comparisons ? null : repetitionSummary(e);
     const best = records.some(r => r.id === w.id && r.exerciseId === e.id);
-    const timeLabel = overview.best === null ? '' : overview.best < 6000 ? `${(overview.best / 100).toFixed(2)} с` : formatCentiseconds(overview.best);
-    const countLabel = b.rounds === 1 ? '' : e.resultMode === 'best' ? (overview.count ? 'Круг неизвестен' : '') : `${overview.count} из ${b.rounds} результатов`;
+    const timeLabel = overview.best === null ? '' : formatCentiseconds(overview.best);
+    const countLabel = b.rounds === 1 || e.resultMode === 'best' ? '' : `${overview.count} из ${b.rounds} результатов`;
     const history = comparisons ? e.results.map(r => {
       const swim = swims.find(s => s.resultId === r.id);
       const previous = swim ? previousResult(workouts, swim) : null;
       const delta = previous ? r.timeCs - previous.timeCs : null;
-      return `<li>${r.round === null ? 'Круг неизвестен' : `Круг ${r.round}`} · ${formatCentiseconds(r.timeCs)}${previous ? `<p>${delta < 0 ? 'Быстрее' : delta > 0 ? 'Дольше' : 'Без изменения'}${delta ? ' на ' + formatCentiseconds(Math.abs(delta)) : ''}. Предыдущий: ${formatCentiseconds(previous.timeCs)}.</p>` : ''}</li>`;
+      return `<li>${r.round === null ? '' : `Круг ${r.round} · `}${formatCentiseconds(r.timeCs)}${previous ? `<p>${delta < 0 ? 'Быстрее' : delta > 0 ? 'Дольше' : 'Без изменения'}${delta ? ' на ' + formatCentiseconds(Math.abs(delta)) : ''}. Предыдущий: ${formatCentiseconds(previous.timeCs)}.</p>` : ''}</li>`;
     }).join('') : '';
     return `<div class="diary-exercise"><button class="exercise-quick-button" data-action="quick-results" data-id="${esc(w.id)}" data-exercise-id="${esc(e.id)}" aria-label="Время: ${e.distance} м ${STYLES[e.style]}${e.technique ? ' ' + esc(e.technique) : ''}${timeLabel ? ', ' + esc(timeLabel) : ''}"><span class="exercise-quick-info"><strong>${e.distance} м · ${STYLES[e.style]}${e.technique ? ' · ' + esc(e.technique) : ''}</strong>${e.description ? `<span class="exercise-description-caption">${esc(e.description)}</span>` : ''}${countLabel ? `<small>${esc(countLabel)}</small>` : ''}</span><span class="exercise-quick-time" ${overview.best === null ? '' : 'title="Лучшее время в этом упражнении"'}>${best ? `<span class="record-marker" aria-label="Личный рекорд">${icon('trophy')}</span>` : ''}${timeLabel ? `<span>${esc(timeLabel)}</span>` : ''}${icon('clock')}</span></button>
+      ${repetitions ? `<dl class="repetition-summary" aria-label="Сводка повторений">
+        <div><dt>Лучшее время</dt><dd>${formatCentiseconds(repetitions.bestCs)}</dd></div>
+        <div><dt>Среднее время</dt><dd>${formatCentiseconds(repetitions.totalCs / repetitions.count)}</dd></div>
+        <div><dt>Худшее время</dt><dd>${formatCentiseconds(repetitions.worstCs)}</dd></div>
+        <div><dt>Разброс</dt><dd>${Math.floor(repetitions.spreadCs / 100)},${String(repetitions.spreadCs % 100).padStart(2, '0')} с</dd></div>
+      </dl>` : ''}
       ${comparisons && (history || e.plannedTimeCs || e.restAfterCs || e.legacy?.durationCs) ? `<details class="exercise-extra"><summary>Подробности</summary>${e.plannedTimeCs ? `<p>План: ${formatCentiseconds(e.plannedTimeCs)}</p>` : ''}${e.restAfterCs ? `<p>Отдых после упражнения: ${formatCentiseconds(e.restAfterCs)} (кроме последнего в круге)</p>` : ''}${e.legacy?.durationCs ? `<p>Старая продолжительность: ${formatCentiseconds(e.legacy.durationCs)}</p>` : ''}${history ? `<ul class="exercise-list">${history}</ul>` : ''}</details>` : ''}</div>`;
   }).join('')}</div>${comparisons && (b.restBetweenCs || b.restAfterCs) ? `<details class="exercise-extra"><summary>Отдых в блоке</summary>${b.rounds > 1 && b.restBetweenCs ? `<p>Между кругами: ${formatCentiseconds(b.restBetweenCs)}</p>` : ''}${b.restAfterCs ? `<p>После блока: ${formatCentiseconds(b.restAfterCs)}</p>` : ''}</details>` : ''}</section>`).join('');
 }

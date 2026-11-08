@@ -24,7 +24,20 @@ export function resultOverview(draft, rounds) {
   });
   const best = times.length ? times.reduce((min, time) => Math.min(min, time)) : null;
   const label = best === null ? 'Нет результатов' : `Лучшее: ${best < 6000 ? (best / 100).toFixed(2) + ' с' : formatCentiseconds(best)}`;
-  return { best, count: times.length, label: `${label} · ${draft.mode === 'best' ? 'круг неизвестен' : `${times.length} из ${rounds}`}` };
+  return { best, count: times.length, label: `${label}${draft.mode === 'best' ? '' : ` · ${times.length} из ${rounds}`}` };
+}
+export function repetitionSummary(exercise) {
+  if (exercise.resultMode !== 'rounds') return null;
+  let count = 0, totalCs = 0, bestCs = Infinity, worstCs = 0;
+  for (const { timeCs } of exercise.results) {
+    if (!Number.isSafeInteger(timeCs) || timeCs <= 0) continue;
+    count++;
+    totalCs += timeCs;
+    bestCs = Math.min(bestCs, timeCs);
+    worstCs = Math.max(worstCs, timeCs);
+  }
+  // Keep the mean as total/count; round only when formatting it for display.
+  return count < 2 ? null : { count, totalCs, bestCs, worstCs, spreadCs: worstCs - bestCs };
 }
 export function withExerciseResults(workout, exerciseId, draft, createId) {
   let found = false;
