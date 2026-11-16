@@ -76,6 +76,39 @@ body {
 .mobile-nav .active { background:var(--ink); color:var(--paper); }
 button:focus-visible,a:focus-visible,summary:focus-visible { outline-color:var(--coral); }
 
+/* Saved achievements: one dismissible card, without a backdrop or focus capture. */
+.record-notice { position:fixed; right:24px; bottom:24px; z-index:70; width:min(410px,calc(100vw - 32px)); max-height:calc(100dvh - 48px); overflow:auto; padding:24px 22px 12px; border:1px solid var(--line); border-top:2px solid var(--coral); border-radius:4px; background:var(--paper); color:var(--ink); box-shadow:0 8px 32px #203B4D20; animation:record-notice-enter .22s ease-out; }
+.record-notice[hidden] { display:none; }
+.record-notice .record-notice-close { position:absolute; top:5px; right:5px; width:36px; height:36px; font-size:25px; background:var(--paper); }
+.record-notice-heading { display:grid; grid-template-columns:minmax(0,1fr) 78px; align-items:center; gap:14px; padding-right:8px; }
+.record-notice .journal-label { font-size:9px; line-height:1.6; color:var(--slate); }
+.record-notice h2 { margin:7px 0 0; font-family:var(--display); font-size:26px; line-height:1.15; font-weight:500; }
+.record-notice h2>span { color:var(--coral); }
+.record-notice-art { width:78px; height:78px; margin-top:12px; stroke:var(--slate); stroke-width:1.4; }
+.record-notice-accent { stroke:var(--coral); stroke-width:2; }
+.record-notice-discipline { margin-top:18px; font-size:14px; line-height:1.5; font-weight:600; }
+.record-notice-technique { margin-top:4px; font-size:12px; line-height:1.6; color:var(--slate); overflow-wrap:anywhere; }
+.record-notice-result { display:flex; align-items:center; flex-wrap:wrap; gap:12px 20px; margin:15px 0 18px; font-variant-numeric:tabular-nums; }
+.record-notice-result>strong { font-size:36px; line-height:1.2; letter-spacing:-1px; font-weight:650; overflow-wrap:anywhere; max-width:100%; }
+.record-notice-result span { display:block; color:var(--slate); font-size:11px; line-height:1.7; }
+.record-notice-result b { display:block; color:#A23F30; font-size:13px; font-weight:600; margin-top:4px; }
+.record-notice-footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 16px; border-top:1px solid var(--line); padding-top:6px; }
+.record-notice-footer>span { font-size:10px; color:var(--slate); }
+.record-notice-footer .text-link { min-height:44px; font-size:12px; }
+.record-notice.is-first { border-top-color:var(--blue); }
+.record-notice.is-first h2>span,.record-notice.is-first .record-notice-accent { color:var(--slate); stroke:var(--slate); }
+.record-notice.is-first .record-notice-art { opacity:.6; }
+@keyframes record-notice-enter { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@media(prefers-reduced-motion:reduce) { .record-notice { animation:none; } }
+@media(max-width:760px) {
+  .record-notice { right:12px; bottom:calc(84px + env(safe-area-inset-bottom)); width:calc(100vw - 24px); max-height:calc(100dvh - 108px - env(safe-area-inset-bottom)); padding:21px 18px 10px; }
+  .record-notice-heading { grid-template-columns:minmax(0,1fr) 66px; gap:10px; }
+  .record-notice h2 { font-size:24px; }
+  .record-notice-art { width:66px; height:66px; }
+  .record-notice .record-notice-close { width:44px; height:44px; top:0; right:0; }
+  .record-notice-result>strong { font-size:32px; }
+}
+
 /* Overview composition: compact controls with freely placed, non-interactive artwork. */
 .journal-page { padding-top:27px; }
 .journal-header { position:relative; }

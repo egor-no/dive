@@ -5,7 +5,8 @@ import {
   exercisesOf, blockDistance, formatCentiseconds, timedResults, copyWorkout, templateWorkouts,
 } from './domain.js';
 import { statisticsData, dailyPaceSeries, createRecordPreview } from './statistics.js';
-import { achievementsData, achievementHistory } from './achievements.js';
+import { achievementsData, achievementHistory, savedRecordNotices } from './achievements.js';
+import { createRecordNotifier } from './record-notifier.js';
 import { monthSummaryPage, mountMonthSummary, resetSummaryMonth } from './monthly-page.js';
 import { summaryAnnouncementMonth } from './monthly-summary.js';
 import { readWorkouts, writeWorkouts, STORAGE_KEY } from './storage.js';
@@ -46,6 +47,7 @@ const monthLabel = key => dateLabel(`${key}-01`, { month: 'long', year: 'numeric
 const distanceLabel = value => value === null ? 'Без дистанции' : `${number(value)} м`;
 const app = document.querySelector('#app');
 const modalRoot = document.querySelector('#modal-root');
+const recordNotifier = createRecordNotifier();
 let today = dateKey();
 let workouts = [];
 let storageError = '';
@@ -73,6 +75,12 @@ function toast(message) {
   element.classList.add('visible');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => element.classList.remove('visible'), 4500);
+}
+function notifySaved(message, notices) {
+  if (!notices.length) { toast(message); return; }
+  clearTimeout(toastTimer);
+  document.querySelector('#toast').classList.remove('visible');
+  recordNotifier.show(notices);
 }
 function persist(next) {
   if (!demo) {
@@ -367,6 +375,7 @@ function mountPaceTooltip(root = app) {
   });
 }
 function openModal(title, body, wide = false) {
+  recordNotifier.clear();
   hidePaceTooltip();
   activeEditor?.dispose(); activeEditor = null;
   lastFocus = document.activeElement;
@@ -422,8 +431,10 @@ function showForm(existing = null, initialDate = today, seed = null) {
     onDiscard: () => closeModal(true),
     onSave: candidate => {
       if (existing && JSON.stringify(workouts.find(item => item.id === existing.id)) !== baseline) throw new Error('Эта запись изменилась в другой вкладке. Закройте окно и откройте запись заново.');
-      persist(existing ? workouts.map(item => item.id === candidate.id ? candidate : item) : [...workouts, candidate]);
-      closeModal(true); render(); toast('Тренировка сохранена');
+      const next = existing ? workouts.map(item => item.id === candidate.id ? candidate : item) : [...workouts, candidate];
+      const notices = demo ? [] : savedRecordNotices(workouts, next, candidate.id);
+      persist(next);
+      closeModal(true); render(); notifySaved('Тренировка сохранена', notices);
     },
   });
 }
@@ -468,12 +479,14 @@ function showQuickResults(id, exerciseId) {
     try {
       if (JSON.stringify(workouts.find(item => item.id === id)) !== baseline) throw new Error('Тренировка изменилась в другой вкладке. Откройте её заново.');
       const updated = validateWorkout(withExerciseResults(w, exerciseId, editor.getDraft()), today);
-      persist(workouts.map(item => item.id === id ? updated : item));
+      const next = workouts.map(item => item.id === id ? updated : item);
+      const notices = demo ? [] : savedRecordNotices(workouts, next, id);
+      persist(next);
       closeModal(true); render();
       app.querySelectorAll('.exercise-quick-button').forEach(button => {
         if (button.dataset.id === id && button.dataset.exerciseId === exerciseId) { const disclosure = button.closest('details'); if (disclosure) disclosure.open = true; }
       });
-      toast('Результаты сохранены');
+      notifySaved('Результаты сохранены', notices);
     } catch (reason) { const error = form.querySelector('#quick-error'); error.textContent = reason.message; error.hidden = false; error.focus(); }
   });
 }
