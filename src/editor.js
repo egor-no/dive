@@ -4,6 +4,9 @@ import { resultsEditorHTML, mountResultsEditor, discardHTML, protectEditor } fro
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const id = () => crypto.randomUUID();
 const valueTime = value => value === null ? '' : formatCentiseconds(value);
+const TECHNIQUE_PRESETS = ['Ногами с доской', 'Руками с колобашкой', 'В ластах', 'С лопатками'];
+const BLOCK_TITLE_PRESETS = ['Разминка', 'Основная часть', 'Техника', 'На время', 'На выносливость', 'Спринт', 'Заминка'];
+const presetButtons = (values, action, label) => `<div class="technique-presets" role="group" aria-label="${esc(label)}">${values.map(value => `<button type="button" data-edit="${action}" data-value="${esc(value)}">${esc(value)}</button>`).join('')}</div>`;
 const field = (name, label, value = '', attrs = '') => `<label class="field"><span>${label}</span><input name="${name}" value="${esc(value)}" ${attrs}></label>`;
 const timeField = (name, label, value) => field(name, label, valueTime(value), 'inputmode="decimal" placeholder="мин:сек или секунды" maxlength="14"');
 const time = (card, name) => parseTime(card.querySelector(`[name="${name}"]`).value);
@@ -35,7 +38,7 @@ function exerciseHTML(e, rounds) {
     <div class="exercise-main-fields">${field('exercise-distance', 'Дистанция, м', e.distance ?? '', 'type="number" min="1" max="100000" step="1" inputmode="numeric"')}
     <label class="field"><span>Стиль</span><select name="exercise-style">${Object.entries(STYLES).map(([k,v]) => `<option value="${k}" ${e.style === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label></div>
     <details class="editor-options"><summary>Техника и плановые параметры</summary><div class="form-grid">
-    ${field('exercise-technique', 'Техника', e.technique, 'maxlength="200" placeholder="Ногами, с доской…"')}
+    <div class="technique-field">${field('exercise-technique', 'Техника', e.technique, 'maxlength="200" placeholder="Ногами, с доской…"')}${presetButtons(TECHNIQUE_PRESETS, 'set-technique', 'Быстрый выбор техники')}</div>
     ${field('exercise-description', 'Название или описание', e.description, 'maxlength="500"')}
     ${timeField('exercise-planned', 'Плановое время', e.plannedTimeCs)}${timeField('exercise-rest', 'Отдых после упражнения', e.restAfterCs)}</div>
     ${e.legacy?.durationCs ? `<p class="exercise-hint">Продолжительность старого задания: ${formatCentiseconds(e.legacy.durationCs)}.</p>` : ''}</details>
@@ -47,7 +50,7 @@ function blockHTML(b, index) {
     <div class="between-rest" ${b.rounds > 1 ? '' : 'hidden'}>${timeField('block-between', 'Отдых между кругами', b.restBetweenCs)}</div></div>
     <div class="block-exercises">${b.exercises.map(e => exerciseHTML(e, b.rounds)).join('')}</div>
     <button type="button" class="text-link add-element" data-edit="add-exercise">+ Добавить упражнение</button>
-    <details class="editor-options"><summary>Настройки блока</summary><div class="form-grid">${field('block-title', 'Название · необязательно', b.title || `Блок ${index + 1}`, 'maxlength="200"')}${timeField('block-after', 'Отдых после блока', b.restAfterCs)}</div><p class="exercise-hint">В конце круга отдых упражнения заменяется паузой между кругами, в конце блока — паузой после блока.</p></details>
+    <details class="editor-options"><summary>Настройки блока</summary><div class="form-grid"><div class="technique-field">${field('block-title', 'Название · необязательно', b.title || `Блок ${index + 1}`, 'maxlength="200"')}${presetButtons(BLOCK_TITLE_PRESETS, 'set-block-title', 'Быстрый выбор названия блока')}</div>${timeField('block-after', 'Отдых после блока', b.restAfterCs)}</div><p class="exercise-hint">В конце круга отдых упражнения заменяется паузой между кругами, в конце блока — паузой после блока.</p></details>
     ${tools('block')}</div></details>`;
 }
 export function editorHTML(w, { editing = false } = {}) {
@@ -133,7 +136,14 @@ export function mountEditor(w, { today, onSave, onDiscard, persisted = false }) 
     if (!button) return;
     const action = button.dataset.edit;
     const b = button.closest('.block-editor');
-    if (action === 'add-exercise') {
+    if (action === 'set-technique' || action === 'set-block-title') {
+      const input = action === 'set-block-title' ? b.querySelector('[name="block-title"]')
+        : button.closest('.exercise-editor').querySelector('[name="exercise-technique"]');
+      input.value = button.dataset.value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus({ preventScroll: true });
+      input.setSelectionRange(input.value.length, input.value.length);
+    } else if (action === 'add-exercise') {
       const items = b.querySelector('.block-exercises');
       for (const e of items.children) if (num(e, 'exercise-distance') > 0) e.open = false;
       const exercise = newExercise();

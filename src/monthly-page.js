@@ -116,7 +116,9 @@ function showMonthDesigns(month, getWorkouts, getStorageError, openModal) {
         ctx.drawImage(source, 0, 0, 216, 270);
         button.setAttribute('aria-pressed', String(button.dataset.monthDesign === design));
       }
-      preview.setAttribute('aria-label', `${designName(design)}. ${summaryMonthLabel(month)}. Дистанция ${number(data.distance)} м, тренировок ${data.trainingCount}, в среднем ${number(data.averageDistance)} м, новых личных рекордов ${data.newRecords}.`);
+      const favorite = data.favorite;
+      const favoriteDescription = favorite ? ` Любимая дистанция: ${number(favorite.distance)} м, ${STYLES[favorite.style]}${favorite.technique ? ', ' + favorite.technique : ''}. Выполнений: ${favorite.count}, всего ${number(favorite.totalDistance)} м.` : '';
+      preview.setAttribute('aria-label', `${designName(design)}. ${summaryMonthLabel(month)}. Дистанция ${number(data.distance)} м, тренировок ${data.trainingCount}, в среднем ${number(data.averageDistance)} м, новых личных рекордов ${data.newRecords}.${favoriteDescription}`);
       previewWrap.hidden = false; errorBox.hidden = true; download.disabled = false;
     } catch (error) { previewWrap.hidden = true; showError(error); }
     finally { previewWrap.setAttribute('aria-busy', 'false'); }

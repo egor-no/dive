@@ -1,4 +1,4 @@
-import { dateKey, shiftDate, monthKey, summary, monthlySeries, totalDistance, personalBests, paceSeries, recordKey } from './domain.js';
+import { dateKey, shiftDate, monthKey, summary, monthlySeries, totalDistance, personalBests, paceSeries, recordKey, techniqueKey, blockDistance, STYLES } from './domain.js';
 
 const weekStart = today => shiftDate(today, -((new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7));
 
@@ -35,7 +35,27 @@ export function statisticsData(workouts, period = 'all', today = dateKey()) {
       distance: future ? null : items.reduce((sum, workout) => sum + (totalDistance(workout) ?? 0), 0) };
   }) : period === 'month' ? monthWeekSeries(workouts, today) : monthlySeries(workouts, today);
   return { selected, stats: { ...stats, averageDistance: stats.total ? stats.distance / stats.total : 0 },
-    chartSeries, records: personalBests(selected) };
+    chartSeries, records: personalBests(selected), favorites: favoriteDistances(selected) };
+}
+
+export function favoriteDistances(selected) {
+  const groups = new Map();
+  for (const workout of selected) {
+    for (const block of workout.blocks) {
+      for (const exercise of block.exercises) {
+        const key = recordKey(exercise);
+        if (!groups.has(key)) groups.set(key, { key, distance: exercise.distance, style: exercise.style,
+          technique: techniqueKey(exercise.technique || ''), count: 0, totalDistance: 0 });
+        const group = groups.get(key);
+        group.count += block.rounds;
+        // Use the same distance rule as workout totals, regardless of recorded times.
+        group.totalDistance += blockDistance({ rounds: block.rounds, exercises: [exercise] });
+      }
+    }
+  }
+  const name = item => `${STYLES[item.style]}${item.technique ? ' · ' + item.technique : ''}`;
+  return [...groups.values()].sort((a, b) => b.count - a.count || b.totalDistance - a.totalDistance
+    || name(a).localeCompare(name(b), 'ru-RU')).slice(0, 3);
 }
 
 export function dailyPaceSeries(workouts, key) {

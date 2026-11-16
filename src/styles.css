@@ -61,6 +61,13 @@ body {
 .field input,.field select,.field textarea,.search-box,.diary-inputs select,.result-cell input,.result-mode-label select { background:var(--white); border-color:var(--line); border-radius:4px; color:var(--ink); }
 .block-editor { background:#ECEDE3; border-color:var(--line); border-radius:5px; }
 .exercise-editor,.block-exercises .exercise-editor { background:var(--white); border-radius:4px; }
+.technique-field { min-width:0; }
+.technique-presets { display:flex; flex-wrap:wrap; gap:6px; margin-top:7px; }
+.technique-presets button { min-height:32px; max-width:100%; padding:6px 9px; border:1px solid var(--line); border-radius:3px; background:var(--paper); color:var(--ink); font-size:11px; line-height:1.4; text-align:left; overflow-wrap:anywhere; }
+.technique-presets button:hover { background:var(--blue-light); border-color:var(--slate); }
+@media(max-width:760px) {
+  .technique-presets button { min-height:44px; padding:9px 11px; }
+}
 .segmented { background:#E0E2D8; border-radius:4px; }
 .segmented button { border-radius:2px; }
 .segmented button.selected { background:var(--white); color:var(--ink); box-shadow:none; }
@@ -465,6 +472,26 @@ button:focus-visible,a:focus-visible,summary:focus-visible { outline-color:var(-
 .stats-page .empty-symbol { border-radius:3px; background:var(--blue-light); }
 .stats-page .empty-state h3 { font-family:var(--display); font-size:22px; }
 .stats-page .records-footer { display:flex; justify-content:flex-end; padding-top:16px; }
+.stats-page .favorites-panel { margin-bottom:30px; }
+.favorite-list { list-style:none; margin:0; padding:0; }
+.favorite-list>li { display:grid; grid-template-columns:52px minmax(0,1fr) auto; align-items:center; gap:10px 20px; padding:18px 0; border-bottom:1px solid var(--line); }
+.favorite-rank { font-family:var(--display); font-size:36px; line-height:1; color:var(--coral); font-variant-numeric:tabular-nums; }
+.favorite-info { min-width:0; overflow-wrap:anywhere; }
+.favorite-info h3 { font-size:16px; line-height:1.4; font-weight:600; }
+.favorite-info p { margin-top:5px; font-size:12px; line-height:1.6; color:var(--slate); }
+.favorite-values { display:flex; gap:28px; margin:0; font-variant-numeric:tabular-nums; }
+.favorite-values dd { margin:0; font-size:16px; white-space:nowrap; }
+.favorite-values>div:last-child dd { color:var(--slate); font-size:14px; }
+.favorite-bar { grid-column:2 / -1; height:4px; background:var(--blue-light); }
+.favorite-bar>span { display:block; height:100%; background:var(--blue); }
+.favorite-list>li:first-child .favorite-bar>span { background:var(--coral); }
+.favorites-empty { padding:6px 0 18px; color:var(--slate); font-size:13px; line-height:1.8; }
+@media(max-width:600px) {
+  .favorite-list>li { grid-template-columns:38px minmax(0,1fr); gap:9px 14px; }
+  .favorite-rank { font-size:30px; }
+  .favorite-info h3 { font-size:15px; }
+  .favorite-values { grid-column:2; justify-content:space-between; gap:8px 16px; flex-wrap:wrap; }
+}
 
 /* Monthly recap: local, printable editions of the swimming journal. */
 .month-announcement { display:grid; grid-template-columns:minmax(0,1fr) 32px auto; align-items:center; gap:12px 22px; margin-top:22px; margin-bottom:20px; padding:16px 0; border-block:1px solid var(--line); min-width:0;

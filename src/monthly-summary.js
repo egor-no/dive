@@ -1,4 +1,5 @@
 import { dateKey, validDate, monthKey, totalDistance, timedResults, recordKey, paceSeries } from './domain.js';
+import { favoriteDistances } from './statistics.js';
 
 export function monthLastDay(month) {
   if (!validDate(`${month}-01`)) throw new Error('Выберите корректный месяц и год.');
@@ -68,6 +69,7 @@ export function monthlySummary(workouts, month, today = dateKey()) {
     month, trainingCount: selected.length, distance,
     averageDistance: selected.length ? distance / selected.length : 0,
     newRecords, records, previousMonth, previousDistance,
+    favorite: favoriteDistances(selected)[0] ?? null,
     distanceChangePercent: previousDistance > 0 ? (distance - previousDistance) / previousDistance * 100 : null,
   };
 }

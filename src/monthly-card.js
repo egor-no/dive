@@ -1,4 +1,5 @@
 import { assertSummaryMonthAvailable, monthlySummary } from './monthly-summary.js';
+import { STYLES } from './domain.js';
 
 export const CARD_DESIGNS = ['paper', 'night', 'poster'];
 export const CARD_WIDTH = 1080;
@@ -29,6 +30,37 @@ function text(ctx, value, x, y, size, width, options = {}) {
   if (measured > width) ctx.font = font(size * width / measured);
   ctx.fillText(String(value), x, y);
   ctx.restore();
+}
+function favoriteLabels(favorite) {
+  const few = favorite.count % 10 >= 2 && favorite.count % 10 <= 4 && !(favorite.count % 100 >= 12 && favorite.count % 100 <= 14);
+  return { title: `${number(favorite.distance)} м · ${STYLES[favorite.style]}`, technique: favorite.technique,
+    totals: `${number(favorite.count)} ${few ? 'раза' : 'раз'} · ${number(favorite.totalDistance)} м` };
+}
+// Keep the full technique, including long words, within each design's reserved area.
+function techniqueText(ctx, value, x, y, size, width, maxLines, lineHeight, options = {}) {
+  if (!value) return;
+  let lines;
+  ctx.save();
+  do {
+    ctx.font = `400 ${size}px ${sans}`;
+    lines = [''];
+    for (const word of value.split(/\s+/)) {
+      const current = lines.at(-1);
+      const joined = current ? `${current} ${word}` : word;
+      if (ctx.measureText(joined).width <= width) lines[lines.length - 1] = joined;
+      else {
+        if (current) lines.push('');
+        for (const letter of word) {
+          if (lines.at(-1) && ctx.measureText(lines.at(-1) + letter).width > width) lines.push('');
+          lines[lines.length - 1] += letter;
+        }
+      }
+    }
+    if (lines.length <= maxLines || size <= 1) break;
+    size--;
+  } while (true);
+  ctx.restore();
+  lines.forEach((value, index) => text(ctx, value, x, y + index * lineHeight, size, width, { ...options, weight: 400 }));
 }
 function line(ctx, x1, y1, x2, y2, color = C.ink, width = 1) {
   ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = width;
@@ -74,10 +106,19 @@ function drawPaper(ctx, data) {
   line(ctx, 405, 682, 405, 931, C.blue);
   text(ctx, `${number(data.averageDistance, 1)} м`, 436, 886, 78, 565, { weight: 700 });
   text(ctx, 'В СРЕДНЕМ ЗА ТРЕНИРОВКУ', 438, 927, 21, 565, { weight: 500 });
-  for (let i = 0; i < 5; i++) {
-    ctx.beginPath(); ctx.strokeStyle = i === 0 ? C.coral : C.blue; ctx.lineWidth = 12;
-    ctx.moveTo(64, 1007 + i * 29);
-    ctx.bezierCurveTo(190, 930 + i * 29, 310, 1117 + i * 29, 507, 1020 + i * 29); ctx.stroke();
+  if (data.favorite) {
+    const favorite = favoriteLabels(data.favorite);
+    line(ctx, 64, 974, 124, 974, C.coral, 2);
+    text(ctx, 'ЛЮБИМАЯ ДИСТАНЦИЯ', 145, 980, 19, 440, { weight: 500, color: C.coral });
+    text(ctx, favorite.title, 64, 1030, 37, 535, { family: serif });
+    techniqueText(ctx, favorite.technique, 64, 1066, 22, 535, 3, 28);
+    text(ctx, favorite.totals, 64, favorite.technique ? 1180 : 1090, 26, 535, { weight: 500 });
+  } else {
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath(); ctx.strokeStyle = i === 0 ? C.coral : C.blue; ctx.lineWidth = 12;
+      ctx.moveTo(64, 1007 + i * 29);
+      ctx.bezierCurveTo(190, 930 + i * 29, 310, 1117 + i * 29, 507, 1020 + i * 29); ctx.stroke();
+    }
   }
   text(ctx, number(data.newRecords), 685, 1085, 122, 330, { family: serif, italic: true, color: C.coral });
   text(ctx, 'НОВЫХ ЛИЧНЫХ', 687, 1129, 21, 330, { weight: 500 });
@@ -97,9 +138,16 @@ function drawNight(ctx, data) {
   circle(ctx, 848, 366, 169, C.coral, true, 2);
   text(ctx, number(data.trainingCount), 848, 386, 111, 246, { family: numeral, color: C.paper, align: 'center', weight: 800 });
   text(ctx, 'ТРЕНИРОВОК', 848, 432, 21, 245, { color: C.paper, align: 'center', weight: 500 });
-  text(ctx, number(data.distance), 411, 633, 156, 535, { family: numeral, color: C.paper, align: 'center', weight: 900 });
-  text(ctx, 'МЕТРОВ ЗА МЕСЯЦ', 411, 684, 24, 500, { color: C.sand, align: 'center', weight: 500 });
-  line(ctx, 311, 729, 511, 729, C.sand);
+  text(ctx, number(data.distance), 411, data.favorite ? 560 : 633, data.favorite ? 140 : 156, data.favorite ? 470 : 535, { family: numeral, color: C.paper, align: 'center', weight: 900 });
+  text(ctx, 'МЕТРОВ ЗА МЕСЯЦ', 411, data.favorite ? 614 : 684, 24, 500, { color: C.sand, align: 'center', weight: 500 });
+  line(ctx, 311, data.favorite ? 650 : 729, 511, data.favorite ? 650 : 729, C.sand);
+  if (data.favorite) {
+    const favorite = favoriteLabels(data.favorite);
+    text(ctx, 'ЛЮБИМАЯ ДИСТАНЦИЯ', 411, 707, 19, 420, { color: C.sand, align: 'center', weight: 500 });
+    text(ctx, favorite.title, 411, 751, 36, 470, { color: C.paper, align: 'center' });
+    techniqueText(ctx, favorite.technique, 411, 779, 21, 380, 4, 22, { color: C.paper, align: 'center' });
+    text(ctx, favorite.totals, 411, favorite.technique ? 882 : 806, 24, 280, { color: C.sand, align: 'center', weight: 500 });
+  }
   circle(ctx, 848, 982, 157, C.sand);
   circle(ctx, 848, 982, 173, C.blue, true, 2);
   text(ctx, number(data.newRecords), 848, 987, 107, 235, { family: serif, italic: true, align: 'center' });
@@ -126,10 +174,21 @@ function drawPoster(ctx, data) {
   text(ctx, summaryComparison(data) || 'Каждый метр — часть вашей истории.', 64, 723, 25, 950, { weight: 500 });
   text(ctx, number(data.trainingCount), 54, 947, 199, 493, { family: numeral, weight: 900 });
   text(ctx, 'ТРЕНИРОВОК', 67, 1000, 30, 480, { weight: 700 });
-  for (let i = 0; i < 4; i++) {
-    ctx.beginPath(); ctx.strokeStyle = C.paper; ctx.lineWidth = 17;
-    ctx.moveTo(625, 833 + i * 42);
-    ctx.bezierCurveTo(758, 736 + i * 42, 842, 940 + i * 42, 1088, 811 + i * 42); ctx.stroke();
+  if (data.favorite) {
+    const favorite = favoriteLabels(data.favorite);
+    ctx.save(); ctx.translate(640, 790); ctx.rotate(-0.12);
+    text(ctx, 'ЛЮБИМАЯ ДИСТАНЦИЯ', 0, 0, 18, 355, { weight: 700 });
+    text(ctx, favorite.title, 0, 48, 38, 355, { weight: 800 });
+    techniqueText(ctx, favorite.technique, 0, 82, 22, 355, 4, 24);
+    text(ctx, favorite.totals, 0, favorite.technique ? 204 : 108, 25, 355, { weight: 600 });
+    line(ctx, 0, 235, 355, 235, C.paper, 3);
+    ctx.restore();
+  } else {
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath(); ctx.strokeStyle = C.paper; ctx.lineWidth = 17;
+      ctx.moveTo(625, 833 + i * 42);
+      ctx.bezierCurveTo(758, 736 + i * 42, 842, 940 + i * 42, 1088, 811 + i * 42); ctx.stroke();
+    }
   }
   ctx.fillStyle = C.ink; ctx.fillRect(0, 1080, 1080, 270);
   text(ctx, `${number(data.averageDistance, 1)} м`, 64, 1214, 85, 529, { color: C.paper, weight: 700 });
